@@ -40,18 +40,22 @@ router.get('/', auth, async (req, res) => {
 router.post('/', auth, async (req, res) => {
   const { company, ceo, email, phone, location, website, industry, notes } = req.body;
   if (!company?.trim()) return res.status(400).json({ error: 'Firmenname ist erforderlich' });
-
-  const [r] = await db.query(
-    `INSERT INTO leads (company, ceo, email, phone, location, website, industry, notes,
-      status, assigned_to, created_by, source, confidence)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [company.trim(), ceo||null, email||null, phone||null, location||null,
-     website||null, industry||null, notes||null,
-     'neu', req.user.role === 'closer' ? req.user.id : null,
-     req.user.id, 'manuell', 80]
-  );
-  await log(req.user.id, 'lead_create_manual', 'lead', r.insertId, { company }, req.ip);
-  res.status(201).json({ ok: true, id: r.insertId });
+  try {
+    const [r] = await db.query(
+      `INSERT INTO leads (company, ceo, email, phone, location, website, industry, notes,
+        status, assigned_to, created_by, source, confidence)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [company.trim(), ceo||null, email||null, phone||null, location||null,
+       website||null, industry||null, notes||null,
+       'neu', req.user.role === 'closer' ? req.user.id : null,
+       req.user.id, 'manuell', 80]
+    );
+    await log(req.user.id, 'lead_create_manual', 'lead', r.insertId, { company }, req.ip);
+    res.status(201).json({ ok: true, id: r.insertId });
+  } catch(e) {
+    console.error('Lead create error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── POST /api/leads/bulk — mehrere Leads auf einmal speichern (Admin) ──
@@ -196,11 +200,13 @@ router.delete('/:id/reminders/:rid', auth, async (req, res) => {
 // ── PATCH /api/leads/:id/assign — Closer übernimmt Lead ─────
 router.patch('/:id/assign', auth, async (req, res) => {
   const id = parseInt(req.params.id);
-  const [[lead]] = await db.query('SELECT id FROM leads WHERE id=?', [id]);
-  if (!lead) return res.status(404).json({ error: 'Nicht gefunden' });
-  await db.query('UPDATE leads SET assigned_to=? WHERE id=?', [req.user.id, id]);
-  await log(req.user.id, 'lead_assign', 'lead', id, { assigned_to: req.user.id }, req.ip);
-  res.json({ ok: true });
+  try {
+    const [[lead]] = await db.query('SELECT id FROM leads WHERE id=?', [id]);
+    if (!lead) return res.status(404).json({ error: 'Nicht gefunden' });
+    await db.query('UPDATE leads SET assigned_to=? WHERE id=?', [req.user.id, id]);
+    await log(req.user.id, 'lead_assign', 'lead', id, { assigned_to: req.user.id }, req.ip);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── POST /api/leads/:id/email — E-Mail an Lead senden ────────
@@ -209,19 +215,23 @@ router.post('/:id/email', auth, async (req, res) => {
   const { to, subject, body } = req.body;
   if (!to || !subject || !body)
     return res.status(400).json({ error: 'to, subject und body sind erforderlich' });
+  try {
+    const [[lead]] = await db.query('SELECT * FROM leads WHERE id=?', [id]);
+    if (!lead) return res.status(404).json({ error: 'Nicht gefunden' });
 
-  const [[lead]] = await db.query('SELECT * FROM leads WHERE id=?', [id]);
-  if (!lead) return res.status(404).json({ error: 'Nicht gefunden' });
+    const [[user]] = await db.query('SELECT full_name FROM users WHERE id=?', [req.user.id]);
+    await sendLeadEmail({ to, subject, body, fromName: user?.full_name || 'NovaFlow' });
 
-  const [[user]] = await db.query('SELECT full_name FROM users WHERE id=?', [req.user.id]);
-  await sendLeadEmail({ to, subject, body, fromName: user?.full_name || 'NovaFlow' });
-
-  await db.query(
-    'INSERT INTO comments (lead_id, user_id, text) VALUES (?,?,?)',
-    [id, req.user.id, `📧 E-Mail gesendet: ${subject}`]
-  );
-  await log(req.user.id, 'lead_email_sent', 'lead', id, { to, subject }, req.ip);
-  res.json({ ok: true });
+    await db.query(
+      'INSERT INTO comments (lead_id, user_id, text) VALUES (?,?,?)',
+      [id, req.user.id, `📧 E-Mail gesendet: ${subject}`]
+    );
+    await log(req.user.id, 'lead_email_sent', 'lead', id, { to, subject }, req.ip);
+    res.json({ ok: true });
+  } catch(e) {
+    console.error('Email send error:', e.message);
+    res.status(500).json({ error: 'E-Mail konnte nicht gesendet werden: ' + e.message });
+  }
 });
 
 module.exports = router;
