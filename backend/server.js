@@ -37,7 +37,7 @@ app.use('/api/generate', generateRoutes);
 // ── SPA Fallback ──────────────────────────────────────────────
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api')) return res.status(404).json({ error: 'Not found' });
-  res.sendFile(path.join(__dirname, '../../public_html/login.html'));
+  res.sendFile(path.join(__dirname, '../public_html/login.html'));
 });
 
 // ── Start ─────────────────────────────────────────────────────
