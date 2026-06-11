@@ -27,27 +27,13 @@ app.use('/api/auth/login', rateLimit({ windowMs: 15*60*1000, max: 20 }));
 app.use('/api/generate',   rateLimit({ windowMs: 60*1000, max: 5 }));
 
 // ── Static Frontend ───────────────────────────────────────────
-app.use(express.static(path.join(__dirname, '../public_html')));
+app.use(express.static(path.join(__dirname, 'public_html')));
 
 // ── API Routes ────────────────────────────────────────────────
 app.use('/api/auth',     authRoutes);
 app.use('/api/users',    userRoutes);
 app.use('/api/leads',    leadRoutes);
 app.use('/api/generate', generateRoutes);
-
-// ── Debug (temp) ──────────────────────────────────────────────
-const fs = require('fs');
-app.get('/_debug', (req, res) => {
-  const p1 = path.join(__dirname, '../public_html');
-  const p2 = path.join(__dirname, 'public_html');
-  const cwd = process.cwd();
-  res.json({
-    __dirname, cwd,
-    up_public_html:   { path: p1, exists: fs.existsSync(p1), files: fs.existsSync(p1) ? fs.readdirSync(p1) : [] },
-    same_public_html: { path: p2, exists: fs.existsSync(p2), files: fs.existsSync(p2) ? fs.readdirSync(p2) : [] },
-    nodejs_root:      { files: fs.readdirSync(__dirname) },
-  });
-});
 
 // ── SPA Fallback ──────────────────────────────────────────────
 app.get('*', (req, res) => {
