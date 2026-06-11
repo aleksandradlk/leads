@@ -36,6 +36,24 @@ router.get('/', auth, async (req, res) => {
   res.json(leads);
 });
 
+// ── POST /api/leads — einzelnen Lead manuell anlegen (alle User) ────
+router.post('/', auth, async (req, res) => {
+  const { company, ceo, email, phone, location, website, industry, notes } = req.body;
+  if (!company?.trim()) return res.status(400).json({ error: 'Firmenname ist erforderlich' });
+
+  const [r] = await db.query(
+    `INSERT INTO leads (company, ceo, email, phone, location, website, industry, notes,
+      status, assigned_to, created_by, source, confidence)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [company.trim(), ceo||null, email||null, phone||null, location||null,
+     website||null, industry||null, notes||null,
+     'neu', req.user.role === 'closer' ? req.user.id : null,
+     req.user.id, 'manuell', 80]
+  );
+  await log(req.user.id, 'lead_create_manual', 'lead', r.insertId, { company }, req.ip);
+  res.status(201).json({ ok: true, id: r.insertId });
+});
+
 // ── POST /api/leads/bulk — mehrere Leads auf einmal speichern (Admin) ──
 router.post('/bulk', auth, adminOnly, async (req, res) => {
   const { leads, assigned_to } = req.body;

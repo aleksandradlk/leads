@@ -27,13 +27,15 @@
 <div class="app-layout" style="position:relative;z-index:1">
   <aside class="sidebar">
     <div class="logo">
-      <img src="/shared/novaflow-logo.svg" alt="NovaFlow" style="width:44px;display:block;margin-bottom:4px">
+      <img src="/logo.png" alt="NovaFlow" style="height:40px;display:block;margin-bottom:4px">
       <div class="logo-sub">Closer-Dashboard</div>
     </div>
     <nav class="nav">
-      <div class="nav-item active" data-sec="myLeads" onclick="showSection('myLeads')"><i class="fas fa-user-check"></i> Meine Leads</div>
+      <div class="nav-item active" data-sec="myLeads" onclick="showSection('myLeads')"><i class="fas fa-user-check"></i> Meine Leads <span id="rueckrufBadge" style="display:none;margin-left:auto" class="badge" title="Rückrufe offen">0</span></div>
       <div class="nav-item" data-sec="allLeads" onclick="showSection('allLeads')"><i class="fas fa-list"></i> Alle Leads</div>
       <div class="nav-item" data-sec="reminders" onclick="showSection('reminders')"><i class="fas fa-bell"></i> Reminder <span id="reminderBadge" style="display:none" class="badge">0</span></div>
+      <div class="nav-sep"></div>
+      <div class="nav-item" onclick="openPwModal()"><i class="fas fa-key"></i> Passwort ändern</div>
     </nav>
     <div class="sidebar-user" id="sidebarUser"></div>
   </aside>
@@ -45,8 +47,9 @@
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
         <h1 style="font-size:20px;font-weight:700">Meine Leads</h1>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <input type="text" id="mySearch" class="form-control" style="width:180px" placeholder="Suchen..." oninput="filterMyLeads()">
-          <select id="myStatusFilter" class="form-control" style="width:150px" onchange="filterMyLeads()">
+          <button class="btn btn-primary btn-sm" onclick="openAddLeadModal()"><i class="fas fa-plus"></i> Lead hinzufügen</button>
+          <input type="text" id="mySearch" class="form-control" style="width:160px" placeholder="Suchen..." oninput="filterMyLeads()">
+          <select id="myStatusFilter" class="form-control" style="width:140px" onchange="filterMyLeads()">
             <option value="">Alle Status</option>
             <option value="neu">Neu</option>
             <option value="kontaktiert">Kontaktiert</option>
@@ -317,7 +320,10 @@ async function assignToMe(id) {
 }
 
 function updateReminderBadge() {
-  // Reminder-Anzahl wird beim Öffnen des Reminder-Tabs geladen
+  const rueckrufe = myLeads().filter(l => l.status === 'rueckruf').length;
+  const badge = document.getElementById('rueckrufBadge');
+  badge.textContent = rueckrufe;
+  badge.style.display = rueckrufe > 0 ? 'inline' : 'none';
 }
 
 // ── LEAD DETAIL PANEL ─────────────────────────────────────────
@@ -521,9 +527,100 @@ async function loadReminders() {
   } catch (e) { showToast(e.message, 'err'); }
 }
 
+// ── LEAD MANUELL HINZUFÜGEN ───────────────────────────────────
+function openAddLeadModal() {
+  ['cl-company','cl-ceo','cl-phone','cl-email','cl-location','cl-industry','cl-website','cl-notes']
+    .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  document.getElementById('clLeadErr').textContent = '';
+  document.getElementById('clAddLeadModal').classList.add('open');
+  setTimeout(() => document.getElementById('cl-company').focus(), 50);
+}
+function closeAddLeadModal() { document.getElementById('clAddLeadModal').classList.remove('open'); }
+
+async function saveManualLead() {
+  const get = id => document.getElementById(id)?.value.trim() || '';
+  const body = { company: get('cl-company'), ceo: get('cl-ceo'), phone: get('cl-phone'),
+    email: get('cl-email'), location: get('cl-location'), industry: get('cl-industry'),
+    website: get('cl-website'), notes: get('cl-notes') };
+  if (!body.company) { document.getElementById('clLeadErr').textContent = 'Firmenname ist erforderlich'; return; }
+  try {
+    await api('POST', '/leads', body);
+    showToast('Lead hinzugefügt ✓');
+    closeAddLeadModal();
+    loadLeads();
+  } catch(e) { document.getElementById('clLeadErr').textContent = e.message; }
+}
+
+// ── PASSWORT ÄNDERN ───────────────────────────────────────────
+function openPwModal() {
+  ['pw-current','pw-new','pw-new2'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('pwErr').textContent = '';
+  document.getElementById('pwModal').classList.add('open');
+}
+function closePwModal() { document.getElementById('pwModal').classList.remove('open'); }
+
+async function changePassword() {
+  const current = document.getElementById('pw-current').value;
+  const neu     = document.getElementById('pw-new').value;
+  const neu2    = document.getElementById('pw-new2').value;
+  const err     = document.getElementById('pwErr');
+  if (!current || !neu) { err.textContent = 'Bitte alle Felder ausfüllen'; return; }
+  if (neu !== neu2)     { err.textContent = 'Neue Passwörter stimmen nicht überein'; return; }
+  if (neu.length < 6)   { err.textContent = 'Mindestens 6 Zeichen'; return; }
+  try {
+    await api('PATCH', '/auth/password', { current_password: current, new_password: neu });
+    showToast('Passwort geändert ✓');
+    closePwModal();
+  } catch(e) { err.textContent = e.message; }
+}
+
 // Init
 loadLeads();
 setInterval(loadReminders, 5 * 60 * 1000);
 </script>
+
+<!-- MODAL: Lead hinzufügen -->
+<div class="modal-overlay" id="clAddLeadModal" onclick="if(event.target===this)closeAddLeadModal()">
+  <div class="modal-box">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <h2 style="margin:0"><i class="fas fa-plus" style="color:var(--accent);margin-right:8px"></i>Lead hinzufügen</h2>
+      <button class="btn btn-ghost btn-sm" onclick="closeAddLeadModal()"><i class="fas fa-times"></i></button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group" style="margin:0"><label>Firmenname *</label><input id="cl-company" class="form-control" placeholder="Muster GmbH" onkeydown="if(event.key==='Enter')saveManualLead()"></div>
+      <div class="form-group" style="margin:0"><label>Ansprechpartner</label><input id="cl-ceo" class="form-control" placeholder="Max Muster"></div>
+      <div class="form-group" style="margin:0"><label>Telefon</label><input id="cl-phone" class="form-control" placeholder="+49 211 ..."></div>
+      <div class="form-group" style="margin:0"><label>E-Mail</label><input id="cl-email" class="form-control" placeholder="info@..."></div>
+      <div class="form-group" style="margin:0"><label>Standort</label><input id="cl-location" class="form-control" placeholder="Düsseldorf"></div>
+      <div class="form-group" style="margin:0"><label>Branche</label><input id="cl-industry" class="form-control" placeholder="Dachdecker"></div>
+      <div class="form-group" style="grid-column:1/-1;margin:0"><label>Website</label><input id="cl-website" class="form-control" placeholder="https://..."></div>
+      <div class="form-group" style="grid-column:1/-1;margin:0"><label>Notizen</label><textarea id="cl-notes" class="form-control" rows="2" placeholder="Interne Notiz..."></textarea></div>
+    </div>
+    <div style="color:var(--red);font-size:12px;margin-top:8px;min-height:16px" id="clLeadErr"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button class="btn btn-ghost btn-sm" onclick="closeAddLeadModal()">Abbrechen</button>
+      <button class="btn btn-primary btn-sm" onclick="saveManualLead()"><i class="fas fa-save"></i> Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Passwort ändern -->
+<div class="modal-overlay" id="pwModal" onclick="if(event.target===this)closePwModal()">
+  <div class="modal-box" style="max-width:380px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <h2 style="margin:0"><i class="fas fa-key" style="color:var(--accent);margin-right:8px"></i>Passwort ändern</h2>
+      <button class="btn btn-ghost btn-sm" onclick="closePwModal()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="form-group"><label>Aktuelles Passwort</label><input type="password" id="pw-current" class="form-control"></div>
+    <div class="form-group"><label>Neues Passwort</label><input type="password" id="pw-new" class="form-control"></div>
+    <div class="form-group"><label>Neues Passwort wiederholen</label><input type="password" id="pw-new2" class="form-control" onkeydown="if(event.key==='Enter')changePassword()"></div>
+    <div style="color:var(--red);font-size:12px;min-height:16px;margin-bottom:12px" id="pwErr"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost btn-sm" onclick="closePwModal()">Abbrechen</button>
+      <button class="btn btn-primary btn-sm" onclick="changePassword()"><i class="fas fa-save"></i> Speichern</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

@@ -44,7 +44,7 @@
   <!-- SIDEBAR -->
   <aside class="sidebar">
     <div class="logo">
-      <img src="/shared/novaflow-logo.svg" alt="NovaFlow" style="width:44px;display:block;margin-bottom:4px">
+      <img src="/logo.png" alt="NovaFlow" style="height:40px;display:block;margin-bottom:4px">
       <div class="logo-sub">Administrator</div>
     </div>
     <nav class="nav">
@@ -75,6 +75,7 @@
             <option value="rueckruf">Rückruf</option>
             <option value="kunde">Kunde</option>
           </select>
+          <button class="btn btn-primary btn-sm" onclick="openAddLeadModal()"><i class="fas fa-plus"></i> Lead hinzufügen</button>
           <button class="btn btn-ghost btn-sm" onclick="exportCSV()"><i class="fas fa-download"></i> CSV</button>
           <button class="btn btn-ghost btn-sm" onclick="loadLeads()"><i class="fas fa-sync"></i></button>
         </div>
@@ -694,9 +695,62 @@ function exportCSV() {
   showToast('CSV exportiert');
 }
 
+// ── LEAD MANUELL HINZUFÜGEN ───────────────────────────────────
+function openAddLeadModal() {
+  ['ml-company','ml-ceo','ml-phone','ml-email','ml-location','ml-industry','ml-website','ml-notes']
+    .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  document.getElementById('addLeadErr').textContent = '';
+  document.getElementById('addLeadModal').classList.add('open');
+  document.getElementById('ml-company').focus();
+}
+function closeAddLeadModal() { document.getElementById('addLeadModal').classList.remove('open'); }
+
+async function saveManualLead() {
+  const get = id => document.getElementById(id)?.value.trim() || '';
+  const body = { company: get('ml-company'), ceo: get('ml-ceo'), phone: get('ml-phone'),
+    email: get('ml-email'), location: get('ml-location'), industry: get('ml-industry'),
+    website: get('ml-website'), notes: get('ml-notes') };
+  if (!body.company) { document.getElementById('addLeadErr').textContent = 'Firmenname ist erforderlich'; return; }
+  try {
+    await api('POST', '/leads', body);
+    showToast('Lead hinzugefügt ✓');
+    closeAddLeadModal();
+    loadLeads();
+  } catch(e) { document.getElementById('addLeadErr').textContent = e.message; }
+}
+
 // Init
 loadLeads();
 loadClosersForSelect();
+</script>
+
+<!-- MODAL: Lead manuell hinzufügen -->
+<div class="modal-overlay" id="addLeadModal" style="position:fixed;inset:0;background:rgba(7,32,73,.45);z-index:300;display:none;align-items:center;justify-content:center">
+  <div style="background:var(--bg2);border-radius:14px;box-shadow:var(--shadow-lg);padding:28px;width:500px;max-width:96vw;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <h2 style="font-size:16px;font-weight:700;margin:0"><i class="fas fa-plus" style="color:var(--accent);margin-right:8px"></i>Lead manuell hinzufügen</h2>
+      <button class="btn btn-ghost btn-sm" onclick="closeAddLeadModal()"><i class="fas fa-times"></i></button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group" style="margin:0"><label>Firmenname *</label><input id="ml-company" class="form-control" placeholder="Muster GmbH" onkeydown="if(event.key==='Enter')saveManualLead()"></div>
+      <div class="form-group" style="margin:0"><label>Geschäftsführer</label><input id="ml-ceo" class="form-control" placeholder="Max Muster"></div>
+      <div class="form-group" style="margin:0"><label>Telefon</label><input id="ml-phone" class="form-control" placeholder="+49 211 ..."></div>
+      <div class="form-group" style="margin:0"><label>E-Mail</label><input id="ml-email" class="form-control" placeholder="info@..."></div>
+      <div class="form-group" style="margin:0"><label>Standort</label><input id="ml-location" class="form-control" placeholder="Düsseldorf"></div>
+      <div class="form-group" style="margin:0"><label>Branche</label><input id="ml-industry" class="form-control" placeholder="Dachdecker"></div>
+      <div class="form-group" style="grid-column:1/-1;margin:0"><label>Website</label><input id="ml-website" class="form-control" placeholder="https://..."></div>
+      <div class="form-group" style="grid-column:1/-1;margin:0"><label>Notizen</label><textarea id="ml-notes" class="form-control" rows="2" placeholder="Interne Notiz..."></textarea></div>
+    </div>
+    <div style="color:var(--red);font-size:12px;margin-top:8px;min-height:16px" id="addLeadErr"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button class="btn btn-ghost btn-sm" onclick="closeAddLeadModal()">Abbrechen</button>
+      <button class="btn btn-primary btn-sm" onclick="saveManualLead()"><i class="fas fa-save"></i> Speichern</button>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('addLeadModal').addEventListener('click', function(e){ if(e.target===this) closeAddLeadModal(); });
 </script>
 </body>
 </html>
