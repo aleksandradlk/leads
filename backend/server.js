@@ -26,7 +26,7 @@ app.use('/api/auth/login', rateLimit({ windowMs: 15*60*1000, max: 20 }));
 app.use('/api/generate',   rateLimit({ windowMs: 60*1000, max: 5 }));
 
 // ── Static Frontend ───────────────────────────────────────────
-app.use(express.static(path.join(__dirname, '../frontend')));
+app.use(express.static(path.join(__dirname, '../../public_html')));
 
 // ── API Routes ────────────────────────────────────────────────
 app.use('/api/auth',     authRoutes);
