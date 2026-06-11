@@ -20,18 +20,23 @@ router.get('/', auth, adminOnly, async (req, res) => {
 // POST /api/users — neuen Closer anlegen (Admin)
 router.post('/', auth, adminOnly, async (req, res) => {
   const { username, password, full_name, email, role } = req.body;
-  if (!username || !password || !full_name || !email)
-    return res.status(400).json({ error: 'Alle Felder erforderlich' });
+  if (!username || !password || !full_name)
+    return res.status(400).json({ error: 'Name, Benutzername und Passwort sind erforderlich' });
 
-  const [[exists]] = await db.query(
-    'SELECT id FROM users WHERE username = ? OR email = ?', [username, email]
-  );
-  if (exists) return res.status(409).json({ error: 'Benutzername oder E-Mail bereits vergeben' });
+  const emailVal = email && email.trim() ? email.trim() : null;
+
+  const [[existsUser]] = await db.query('SELECT id FROM users WHERE username = ?', [username]);
+  if (existsUser) return res.status(409).json({ error: 'Benutzername bereits vergeben' });
+
+  if (emailVal) {
+    const [[existsEmail]] = await db.query('SELECT id FROM users WHERE email = ?', [emailVal]);
+    if (existsEmail) return res.status(409).json({ error: 'E-Mail bereits vergeben' });
+  }
 
   const hash = await bcrypt.hash(password, 12);
   const [result] = await db.query(
     'INSERT INTO users (username, password_hash, full_name, email, role) VALUES (?,?,?,?,?)',
-    [username, hash, full_name, email, role === 'admin' ? 'admin' : 'closer']
+    [username, hash, full_name, emailVal, role === 'admin' ? 'admin' : 'closer']
   );
   await log(req.user.id, 'user_create', 'user', result.insertId, { username, role }, req.ip);
   res.status(201).json({ ok: true, id: result.insertId });
