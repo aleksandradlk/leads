@@ -217,7 +217,17 @@ async function loadLeads() {
     updateMyStats(myLeads());
     updateAllStats(allLeads);
     updateReminderBadge();
-  } catch (e) { showToast(e.message, 'err'); }
+  } catch (e) {
+    ['myLeadsBody','allLeadsBody'].forEach(id => {
+      const body = document.getElementById(id);
+      if (body) body.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--red)">
+        <i class="fas fa-exclamation-triangle" style="display:block;font-size:24px;margin-bottom:8px"></i>
+        <strong>Verbindungsfehler:</strong> ${escHtml(e.message)}<br>
+        <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="loadLeads()"><i class="fas fa-sync"></i> Erneut versuchen</button>
+      </td></tr>`;
+    });
+    showToast(e.message, 'err');
+  }
 }
 
 function myLeads() {

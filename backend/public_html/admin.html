@@ -362,7 +362,15 @@ async function loadLeads() {
     allLeads = await api('GET', '/leads');
     renderLeads(allLeads);
     updateLeadStats(allLeads);
-  } catch (e) { showToast(e.message, 'err'); }
+  } catch (e) {
+    const body = document.getElementById('leadsTableBody');
+    if (body) body.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--red)">
+      <i class="fas fa-exclamation-triangle" style="display:block;font-size:28px;margin-bottom:10px"></i>
+      <strong>Verbindungsfehler:</strong> ${escHtml(e.message)}<br>
+      <button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="loadLeads()"><i class="fas fa-sync"></i> Erneut versuchen</button>
+    </td></tr>`;
+    showToast(e.message, 'err');
+  }
 }
 
 function filterLeads() {
