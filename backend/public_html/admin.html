@@ -284,19 +284,27 @@
 </div>
 
 <!-- EMAIL MODAL -->
-<div class="modal-overlay" id="adminEmailModal">
-  <div style="background:var(--bg2);border-radius:14px;box-shadow:var(--shadow-lg);padding:28px;width:520px;max-width:96vw;max-height:90vh;overflow-y:auto">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-      <h2 style="font-size:16px;font-weight:700;margin:0"><i class="fas fa-envelope" style="color:var(--accent);margin-right:8px"></i>E-Mail an Lead senden</h2>
-      <button class="btn btn-ghost btn-sm" onclick="closeEmailModal()"><i class="fas fa-times"></i></button>
+<div id="adminEmailModal" style="position:fixed;inset:0;z-index:500;background:rgba(7,32,73,0.55);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--bg2);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.25);width:560px;max-width:96vw;max-height:92vh;overflow-y:auto;display:flex;flex-direction:column">
+    <div style="padding:22px 28px 0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:4px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:36px;height:36px;border-radius:10px;background:rgba(27,115,205,0.12);display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:16px"><i class="fas fa-envelope"></i></div>
+        <div>
+          <div style="font-size:16px;font-weight:700;color:var(--text)">E-Mail senden</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:1px">Vorlage aus Wiki wird automatisch geladen</div>
+        </div>
+      </div>
+      <button onclick="closeEmailModal()" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;width:32px;height:32px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px"><i class="fas fa-times"></i></button>
     </div>
-    <input type="hidden" id="emailLeadId">
-    <div class="form-group"><label>An</label><input type="email" id="emailTo" class="form-control"></div>
-    <div class="form-group"><label>Betreff</label><input type="text" id="emailSubject" class="form-control"></div>
-    <div class="form-group"><label>Nachricht</label><textarea id="emailBody" class="form-control" rows="10" style="resize:vertical;font-size:13px;line-height:1.6"></textarea></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
-      <button class="btn btn-ghost btn-sm" onclick="closeEmailModal()">Abbrechen</button>
-      <button class="btn btn-primary btn-sm" onclick="sendEmail()"><i class="fas fa-paper-plane"></i> Senden</button>
+    <div style="padding:20px 28px 24px;display:flex;flex-direction:column;gap:14px">
+      <input type="hidden" id="emailLeadId">
+      <div class="form-group" style="margin:0"><label>An (E-Mail-Adresse)</label><input type="email" id="emailTo" class="form-control"></div>
+      <div class="form-group" style="margin:0"><label>Betreff</label><input type="text" id="emailSubject" class="form-control"></div>
+      <div class="form-group" style="margin:0"><label>Nachricht <span style="font-size:11px;color:var(--text3);font-weight:400">— frei bearbeitbar</span></label><textarea id="emailBody" class="form-control" rows="12" style="resize:vertical;font-size:13px;line-height:1.65;min-height:200px"></textarea></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:4px;border-top:1px solid var(--border)">
+        <button class="btn btn-ghost btn-sm" onclick="closeEmailModal()">Abbrechen</button>
+        <button class="btn btn-primary btn-sm" onclick="sendEmail()"><i class="fas fa-paper-plane"></i> Senden</button>
+      </div>
     </div>
   </div>
 </div>
@@ -803,9 +811,9 @@ async function openEmailModal(leadId, email, company) {
     document.getElementById('emailSubject').value = '';
     document.getElementById('emailBody').value    = '';
   }
-  document.getElementById('adminEmailModal').classList.add('open');
+  document.getElementById('adminEmailModal').style.display = 'flex';
 }
-function closeEmailModal() { document.getElementById('adminEmailModal').classList.remove('open'); }
+function closeEmailModal() { document.getElementById('adminEmailModal').style.display = 'none'; }
 async function sendEmail() {
   const id      = document.getElementById('emailLeadId').value;
   const to      = document.getElementById('emailTo').value.trim();
