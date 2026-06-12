@@ -27,12 +27,12 @@
 <div class="app-layout" style="position:relative;z-index:1">
   <aside class="sidebar">
     <div class="logo">
-      <img src="/LogoKomplett-klein.PNG" alt="NovaFlow" style="width:100%;height:auto;display:block;margin-bottom:4px">
+      <img src="/LogoKomplett-klein.PNG" alt="NovaFlow" style="max-width:100%;max-height:60px;width:auto;height:auto;display:block;margin-bottom:4px">
       <div class="logo-sub">Closer-Dashboard</div>
     </div>
     <nav class="nav">
-      <div class="nav-item active" data-sec="myLeads" onclick="showSection('myLeads')"><i class="fas fa-user-check"></i> Meine Leads <span id="rueckrufBadge" style="display:none;margin-left:auto" class="badge" title="Rückrufe offen">0</span></div>
-      <div class="nav-item" data-sec="allLeads" onclick="showSection('allLeads')"><i class="fas fa-list"></i> Alle Leads</div>
+      <div class="nav-item active" data-sec="allLeads" onclick="showSection('allLeads')"><i class="fas fa-list"></i> Alle Leads</div>
+      <div class="nav-item" data-sec="myLeads" onclick="showSection('myLeads')"><i class="fas fa-user-check"></i> Meine Leads <span id="rueckrufBadge" style="display:none;margin-left:auto" class="badge" title="Rückrufe offen">0</span></div>
       <div class="nav-item" data-sec="reminders" onclick="showSection('reminders')"><i class="fas fa-bell"></i> Reminder <span id="reminderBadge" style="display:none" class="badge">0</span></div>
       <div class="nav-item" data-sec="wiki" onclick="showSection('wiki')"><i class="fas fa-book"></i> Wiki</div>
       <div class="nav-sep"></div>
@@ -44,7 +44,7 @@
   <main class="main-content">
 
     <!-- MEINE LEADS -->
-    <div id="sec-myLeads">
+    <div id="sec-myLeads" style="display:none">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
         <h1 style="font-size:20px;font-weight:700">Meine Leads</h1>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -87,7 +87,7 @@
     </div>
 
     <!-- ALLE LEADS -->
-    <div id="sec-allLeads" style="display:none">
+    <div id="sec-allLeads">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
         <h1 style="font-size:20px;font-weight:700">Alle Leads</h1>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -188,6 +188,7 @@ startActivityTracking();
 
 const ME = Auth.getUser();
 let allLeads = [];
+let panelDirty = false;
 
 function showSection(name) {
   ['myLeads','allLeads','wiki','reminders'].forEach(s => {
@@ -351,7 +352,7 @@ async function openPanel(id) {
 function closePanel() {
   document.getElementById('leadOverlay').classList.remove('open');
   document.getElementById('leadPanel').classList.remove('open');
-  loadLeads();
+  if (panelDirty) { panelDirty = false; loadLeads(); }
 }
 
 function renderDetail(l) {
@@ -441,14 +442,14 @@ function renderDetail(l) {
 }
 
 async function setStatus(id, status) {
-  try { await api('PATCH', `/leads/${id}/status`, { status }); openPanel(id); }
+  try { await api('PATCH', `/leads/${id}/status`, { status }); panelDirty = true; openPanel(id); }
   catch (e) { showToast(e.message, 'err'); }
 }
 
 async function addComment(id) {
   const input = document.getElementById('newComment');
   if (!input?.value.trim()) return;
-  try { await api('POST', `/leads/${id}/comments`, { text: input.value.trim() }); openPanel(id); }
+  try { await api('POST', `/leads/${id}/comments`, { text: input.value.trim() }); panelDirty = true; openPanel(id); }
   catch (e) { showToast(e.message, 'err'); }
 }
 
@@ -456,7 +457,7 @@ async function addReminder(id) {
   const at   = document.getElementById('remindAt')?.value;
   const note = document.getElementById('remindNote')?.value;
   if (!at) { showToast('Bitte Datum wählen', 'err'); return; }
-  try { await api('POST', `/leads/${id}/reminders`, { remind_at: at, note }); showToast('Reminder gesetzt ✓'); openPanel(id); }
+  try { await api('POST', `/leads/${id}/reminders`, { remind_at: at, note }); panelDirty = true; showToast('Reminder gesetzt ✓'); openPanel(id); }
   catch (e) { showToast(e.message, 'err'); }
 }
 

@@ -327,6 +327,7 @@ renderSidebarUser();
 startActivityTracking();
 
 let allLeads = [], allUsers = [], generatedLeads = [], editingUserId = null;
+let panelDirty = false;
 
 // ── TABS ──────────────────────────────────────────────────────
 function showTab(name) {
@@ -417,7 +418,7 @@ async function openLeadPanel(id) {
 function closeLeadPanel() {
   document.getElementById('leadOverlay').classList.remove('open');
   document.getElementById('leadPanel').classList.remove('open');
-  loadLeads();
+  if (panelDirty) { panelDirty = false; loadLeads(); }
 }
 
 function renderLeadDetail(l) {
@@ -496,7 +497,7 @@ function renderLeadDetail(l) {
 }
 
 async function changeStatus(id, status) {
-  try { await api('PATCH', `/leads/${id}/status`, { status }); openLeadPanel(id); }
+  try { await api('PATCH', `/leads/${id}/status`, { status }); panelDirty = true; openLeadPanel(id); }
   catch (e) { showToast(e.message, 'err'); }
 }
 
@@ -506,6 +507,7 @@ async function assignLead(leadId) {
   try {
     await api('PATCH', `/leads/${leadId}`, { assigned_to });
     showToast(assigned_to ? 'Lead zugewiesen ✓' : 'Zuweisung entfernt ✓');
+    panelDirty = true;
     openLeadPanel(leadId);
   } catch (e) { showToast(e.message, 'err'); }
 }
@@ -515,20 +517,21 @@ async function assignLeadToMe(leadId) {
   try {
     await api('PATCH', `/leads/${leadId}`, { assigned_to: me.id });
     showToast('Lead dir zugewiesen ✓');
+    panelDirty = true;
     openLeadPanel(leadId);
   } catch (e) { showToast(e.message, 'err'); }
 }
 async function addComment(id) {
   const input = document.getElementById(`newComment-${id}`);
   if (!input?.value.trim()) return;
-  try { await api('POST', `/leads/${id}/comments`, { text: input.value.trim() }); openLeadPanel(id); }
+  try { await api('POST', `/leads/${id}/comments`, { text: input.value.trim() }); panelDirty = true; openLeadPanel(id); }
   catch (e) { showToast(e.message, 'err'); }
 }
 async function addReminder(id) {
   const at   = document.getElementById(`newRemindAt-${id}`)?.value;
   const note = document.getElementById(`newRemindNote-${id}`)?.value;
   if (!at) { showToast('Datum wählen', 'err'); return; }
-  try { await api('POST', `/leads/${id}/reminders`, { remind_at: at, note }); showToast('Reminder gesetzt ✓'); openLeadPanel(id); }
+  try { await api('POST', `/leads/${id}/reminders`, { remind_at: at, note }); panelDirty = true; showToast('Reminder gesetzt ✓'); openLeadPanel(id); }
   catch (e) { showToast(e.message, 'err'); }
 }
 async function deleteReminder(leadId, rid) {
