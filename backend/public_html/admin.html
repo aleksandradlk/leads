@@ -334,13 +334,13 @@
 
 <script src="/shared/api.js"></script>
 <script>
+let allLeads = [], allUsers = [], generatedLeads = [], editingUserId = null;
+let panelDirty = false;
+
 Auth.requireAdmin();
 initTheme();
 renderSidebarUser();
 startActivityTracking();
-
-let allLeads = [], allUsers = [], generatedLeads = [], editingUserId = null;
-let panelDirty = false;
 
 // ── TABS ──────────────────────────────────────────────────────
 function showTab(name) {

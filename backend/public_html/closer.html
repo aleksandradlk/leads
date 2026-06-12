@@ -187,15 +187,15 @@
 
 <script src="/shared/api.js"></script>
 <script>
+const ME = Auth.getUser();
+let allLeads = [];
+let panelDirty = false;
+
 Auth.requireAuth();
 if (Auth.isAdmin()) window.location.href = '/admin.html';
 initTheme();
 renderSidebarUser();
 startActivityTracking();
-
-const ME = Auth.getUser();
-let allLeads = [];
-let panelDirty = false;
 
 function showSection(name) {
   ['myLeads','allLeads','wiki','reminders'].forEach(s => {
