@@ -28,19 +28,17 @@
 <div class="app-layout" style="position:relative;z-index:1">
   <aside class="sidebar">
     <div class="logo">
-      <img src="/LogoKomplett-klein.PNG" alt="NovaFlow" style="max-width:100%;max-height:60px;width:auto;height:auto;display:block;margin-bottom:4px">
-      <div style="display:flex;align-items:center;justify-content:space-between">
-        <div class="logo-sub">Closer-Dashboard</div>
-        <button id="themeBtn" onclick="toggleTheme()" title="Dark/Light Mode" style="background:none;border:none;cursor:pointer;font-size:16px;padding:0;line-height:1">🌙</button>
-      </div>
+      <img src="/LogoKomplett-klein.PNG" alt="NovaFlow" style="max-width:100%;max-height:56px;width:auto;height:auto;display:block;margin-bottom:6px">
+      <div class="logo-sub">Closer-Dashboard</div>
     </div>
     <nav class="nav">
+      <span class="nav-group-label">Hauptnavigation</span>
       <div class="nav-item active" data-sec="allLeads" onclick="showSection('allLeads')"><i class="fas fa-list"></i> Alle Leads</div>
       <div class="nav-item" data-sec="myLeads" onclick="showSection('myLeads')"><i class="fas fa-user-check"></i> Meine Leads <span id="rueckrufBadge" style="display:none;margin-left:auto" class="badge" title="Rückrufe offen">0</span></div>
       <div class="nav-item" data-sec="reminders" onclick="showSection('reminders')"><i class="fas fa-bell"></i> Reminder <span id="reminderBadge" style="display:none" class="badge">0</span></div>
-      <div class="nav-item" data-sec="wiki" onclick="showSection('wiki')"><i class="fas fa-book"></i> Wiki</div>
       <div class="nav-sep"></div>
-      <div class="nav-item" onclick="openPwModal()"><i class="fas fa-key"></i> Passwort ändern</div>
+      <span class="nav-group-label">Ressourcen</span>
+      <div class="nav-item" data-sec="wiki" onclick="showSection('wiki')"><i class="fas fa-book"></i> Wissensdatenbank</div>
     </nav>
     <div class="sidebar-user" id="sidebarUser"></div>
   </aside>
@@ -134,7 +132,7 @@
 
     <!-- WIKI -->
     <div id="sec-wiki" style="display:none">
-      <h1 style="font-size:20px;font-weight:700;margin-bottom:20px">Wiki</h1>
+      <h1 style="font-size:20px;font-weight:700;margin-bottom:20px">Wissensdatenbank</h1>
       <div id="wikiFilesContainer"></div>
     </div>
 

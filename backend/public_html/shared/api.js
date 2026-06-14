@@ -138,14 +138,20 @@ function renderSidebarUser() {
   if (!user) return;
   const el = document.getElementById('sidebarUser');
   if (el) {
+    const hasPwModal = typeof openPwModal === 'function';
     el.innerHTML = `
       <div class="avatar">${escHtml(user.full_name?.[0]||'?')}</div>
-      <div>
+      <div class="sidebar-user-info">
         <div class="sidebar-user-name">${escHtml(user.full_name)}</div>
         <div class="sidebar-user-role">${user.role === 'admin' ? 'Administrator' : 'Closer'}</div>
       </div>
-      <button class="logout-btn" title="Abmelden" onclick="logout()"><i class="fas fa-sign-out-alt"></i></button>
+      <div class="sidebar-user-actions">
+        <button class="sidebar-icon-btn" id="themeBtn" title="Design wechseln" onclick="toggleTheme()"><i class="fas fa-moon"></i></button>
+        ${hasPwModal ? `<button class="sidebar-icon-btn" title="Passwort ändern" onclick="openPwModal()"><i class="fas fa-cog"></i></button>` : ''}
+        <button class="sidebar-icon-btn logout-btn" title="Abmelden" onclick="logout()"><i class="fas fa-sign-out-alt"></i></button>
+      </div>
     `;
+    updateThemeBtn();
   }
 }
 
@@ -166,5 +172,13 @@ function toggleTheme() {
 }
 function updateThemeBtn() {
   const btn = document.getElementById('themeBtn');
-  if (btn) btn.textContent = document.body.classList.contains('dark') ? '☀️' : '🌙';
+  if (!btn) return;
+  const isDark = document.body.classList.contains('dark');
+  btn.title = isDark ? 'Hellmodus' : 'Dunkelmodus';
+  const icon = btn.querySelector('i');
+  if (icon) {
+    icon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+  } else {
+    btn.textContent = isDark ? '☀️' : '🌙';
+  }
 }

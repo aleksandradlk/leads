@@ -45,20 +45,20 @@
   <!-- SIDEBAR -->
   <aside class="sidebar">
     <div class="logo">
-      <img src="/LogoKomplett-klein.PNG" alt="NovaFlow" style="max-width:100%;max-height:60px;width:auto;height:auto;display:block;margin-bottom:4px">
-      <div style="display:flex;align-items:center;justify-content:space-between">
-        <div class="logo-sub">Administrator</div>
-        <button id="themeBtn" onclick="toggleTheme()" title="Dark/Light Mode" style="background:none;border:none;cursor:pointer;font-size:16px;padding:0;line-height:1">🌙</button>
-      </div>
+      <img src="/LogoKomplett-klein.PNG" alt="NovaFlow" style="max-width:100%;max-height:56px;width:auto;height:auto;display:block;margin-bottom:6px">
+      <div class="logo-sub">Administrator</div>
     </div>
     <nav class="nav">
+      <span class="nav-group-label">Hauptnavigation</span>
       <div class="nav-item active" onclick="showTab('leads')"><i class="fas fa-database"></i> Leads</div>
       <div class="nav-item" onclick="showTab('generate')"><i class="fas fa-search"></i> Generieren</div>
       <div class="nav-sep"></div>
+      <span class="nav-group-label">Administration</span>
       <div class="nav-item" onclick="showTab('users')"><i class="fas fa-users"></i> Benutzer</div>
       <div class="nav-item" onclick="showTab('tracking')"><i class="fas fa-chart-line"></i> Tracking</div>
       <div class="nav-sep"></div>
-      <div class="nav-item" onclick="showTab('wiki')"><i class="fas fa-book"></i> Wiki</div>
+      <span class="nav-group-label">Ressourcen</span>
+      <div class="nav-item" onclick="showTab('wiki')"><i class="fas fa-book"></i> Wissensdatenbank</div>
     </nav>
     <div class="sidebar-user" id="sidebarUser"></div>
   </aside>
@@ -231,7 +231,7 @@
 
     <!-- ── TAB: WIKI ─────────────────────────────────── -->
     <div id="tab-wiki" class="tab-panel">
-      <h1 style="font-size:20px;font-weight:700;margin-bottom:20px">Wiki</h1>
+      <h1 style="font-size:20px;font-weight:700;margin-bottom:20px">Wissensdatenbank</h1>
 
       <!-- E-Mail Vorlage -->
       <div class="card" style="margin-bottom:20px">
