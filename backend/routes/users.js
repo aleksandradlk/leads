@@ -135,6 +135,14 @@ router.get('/activity/download', auth, adminOnly, async (req, res) => {
   res.send('﻿' + csv);
 });
 
+// GET /api/users/list — Kurzliste aller aktiven User (für Chat-Einladungen, alle Auth-User)
+router.get('/list', auth, async (req, res) => {
+  const [users] = await db.query(
+    `SELECT id, full_name, role FROM users WHERE is_active = 1 ORDER BY full_name ASC`
+  );
+  res.json(users);
+});
+
 // PATCH /api/users/:id/notify — Benachrichtigungs-Präferenzen speichern
 router.patch('/:id/notify', auth, async (req, res) => {
   const id = parseInt(req.params.id);

@@ -217,6 +217,7 @@
 const ME = Auth.getUser();
 let allLeads = [];
 let panelDirty = false;
+let _panelLead = null;
 
 Auth.requireAuth();
 if (Auth.isAdmin()) window.location.href = '/admin.html';
@@ -234,6 +235,7 @@ function showSection(name) {
   if (name === 'reminders') loadReminders();
   if (name === 'wiki')      loadWiki();
   if (name === 'chat')      loadChats();
+  if (name === 'allLeads')  { const f = document.getElementById('allSearch'); if (f) { f.value = ''; } renderAllLeads(allLeads); }
 }
 
 // ── LOADS ─────────────────────────────────────────────────────
@@ -401,6 +403,7 @@ function closePanel() {
 }
 
 function renderDetail(l) {
+  _panelLead = l;
   const isMine = l.assigned_to === ME.id;
   const infoFields = [
     ['Geschäftsführer', l.ceo],
@@ -463,7 +466,7 @@ function renderDetail(l) {
     : '';
 
   const emailBtn = l.email
-    ? `<button class="btn btn-ghost btn-sm" onclick="openEmailModal(${l.id},${JSON.stringify(escHtml(l.email))},${JSON.stringify(escHtml(l.company||''))})">
+    ? `<button class="btn btn-ghost btn-sm" onclick="openEmailModal()">
          <i class="fas fa-envelope"></i> E-Mail senden
        </button>`
     : `<span style="font-size:12px;color:var(--text3)"><i class="fas fa-envelope"></i> Keine E-Mail hinterlegt</span>`;
@@ -515,9 +518,12 @@ async function addReminder(id) {
 }
 
 // ── EMAIL MODAL ───────────────────────────────────────────────
-async function openEmailModal(leadId, email, company) {
-  document.getElementById('emailLeadId').value = leadId;
-  document.getElementById('emailTo').value = email;
+async function openEmailModal() {
+  const l = _panelLead;
+  if (!l?.email) return;
+  document.getElementById('emailLeadId').value = l.id;
+  document.getElementById('emailTo').value = l.email;
+  const company = l.company || '';
   try {
     const tmpl = await api('GET', '/wiki/template');
     document.getElementById('emailSubject').value = (tmpl.subject||'').replace(/{company}/g, company);
@@ -717,6 +723,14 @@ async function deleteComment(leadId, cid) {
   } catch(e) { showToast(e.message, 'err'); }
 }
 
+async function deleteReminder(leadId, rid) {
+  try {
+    await api('DELETE', `/leads/${leadId}/reminders/${rid}`);
+    showToast('Reminder gelöscht');
+    openPanel(leadId);
+  } catch(e) { showToast(e.message, 'err'); }
+}
+
 // ── EINSTELLUNGEN MODAL ────────────────────────────────────────
 async function openSettingsModal() {
   try {
@@ -882,7 +896,7 @@ function closeCreateChat() { document.getElementById('createChatModal').classLis
 
 async function loadUsersForChatInvite(selectId) {
   try {
-    const users = await api('GET', '/users');
+    const users = await api('GET', '/users/list');
     const sel = document.getElementById(selectId);
     if (!sel) return;
     sel.innerHTML = users.filter(u => u.id !== ME.id && u.is_active).map(u =>
