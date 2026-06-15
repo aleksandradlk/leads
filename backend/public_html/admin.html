@@ -1164,7 +1164,6 @@ function showReminderPopup(r) {
 }
 
 // ── CHAT ──────────────────────────────────────────────────────
-let ME = Auth.getUser();
 async function loadChats() {
   try {
     const chats = await api('GET', '/chats');
@@ -1244,9 +1243,9 @@ async function loadUsersForChatInvite() {
     const el = document.getElementById('chatInviteUsersAdmin');
     if (!el) return;
     el.innerHTML = users.filter(u => u.id !== ME?.id).map(u =>
-      `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;font-size:13px">
-        <input type="checkbox" value="${u.id}" style="accent-color:var(--accent)">
-        ${escHtml(u.full_name)} <span style="font-size:11px;color:var(--text3)">(${u.role})</span>
+      `<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;min-height:40px;cursor:pointer;font-size:13px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:var(--bg);transition:background .15s" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='var(--bg)'">
+        <input type="checkbox" value="${u.id}" style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
+        <span style="font-weight:500">${escHtml(u.full_name)}</span><span style="font-size:11px;color:var(--text3);margin-left:auto">${u.role === 'admin' ? 'Admin' : 'Closer'}</span>
       </label>`).join('');
   } catch {}
 }
