@@ -102,7 +102,7 @@ a { color: var(--accent); text-decoration: none; }
 /* ── Sidebar User ────────────────────────────────────────────── */
 .sidebar-user {
   padding: 10px 12px;
-  margin: 4px 8px 8px;
+  margin: auto 8px 8px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg3);
