@@ -31,7 +31,15 @@ router.post('/login', async (req, res) => {
 
   res.json({
     token,
-    user: { id: user.id, username: user.username, full_name: user.full_name, role: user.role, can_edit_contacts: !!user.can_edit_contacts }
+    user: {
+      id: user.id, username: user.username, full_name: user.full_name, role: user.role,
+      can_edit_contacts:  !!user.can_edit_contacts,
+      can_archive_leads:  !!user.can_archive_leads,
+      can_reassign_leads: !!user.can_reassign_leads,
+      can_view_all_leads: !!user.can_view_all_leads,
+      can_create_users:   !!user.can_create_users,
+      can_generate_leads: !!user.can_generate_leads,
+    }
   });
 });
 
@@ -121,7 +129,7 @@ const { auth } = require('../middleware/auth');
 router.get('/me', auth, async (req, res) => {
   try {
     const [[user]] = await db.query(
-      'SELECT id, username, full_name, email, role, notify_email, notify_sms, phone, can_edit_contacts FROM users WHERE id=?',
+      'SELECT id, username, full_name, email, role, notify_email, notify_sms, phone, can_edit_contacts, can_archive_leads, can_reassign_leads, can_view_all_leads, can_create_users, can_generate_leads FROM users WHERE id=?',
       [req.user.id]
     );
     if (!user) return res.status(404).json({ error: 'Nicht gefunden' });

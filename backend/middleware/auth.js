@@ -9,7 +9,7 @@ async function auth(req, res, next) {
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
     const [[user]] = await db.query(
-      'SELECT id, username, full_name, email, role, is_active, can_edit_contacts FROM users WHERE id = ?',
+      'SELECT id, username, full_name, email, role, is_active, can_edit_contacts, can_archive_leads, can_reassign_leads, can_view_all_leads, can_create_users, can_generate_leads FROM users WHERE id = ?',
       [payload.id]
     );
     if (!user || !user.is_active) return res.status(401).json({ error: 'Account gesperrt oder nicht gefunden' });

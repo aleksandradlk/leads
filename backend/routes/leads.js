@@ -6,8 +6,13 @@ const { sendLeadEmail } = require('../helpers/mailer');
 
 const VALID_STATUSES = ['neu','kontaktiert','nicht_erreicht','kein_interesse','rueckruf','kunde'];
 
+function canView(user, lead) {
+  if (user.role === 'admin') return true;
+  if (user.can_view_all_leads) return true;
+  return lead.assigned_to === user.id || lead.assigned_to === null;
+}
+
 // ── GET /api/leads ──────────────────────────────────────────
-// Admin: alle Leads | Closer: nur eigene (assigned_to)
 router.get('/', auth, async (req, res) => {
   const { status, search } = req.query;
   let q = `SELECT l.id, l.company, l.ceo, l.phone, l.email, l.location,
@@ -21,7 +26,10 @@ router.get('/', auth, async (req, res) => {
   const params = [];
   const where  = [];
 
-  // Closer sehen alle Leads (können aber nicht löschen)
+  if (req.user.role !== 'admin' && !req.user.can_view_all_leads) {
+    where.push('(l.assigned_to = ? OR l.assigned_to IS NULL)');
+    params.push(req.user.id);
+  }
   if (status && VALID_STATUSES.includes(status)) {
     where.push('l.status = ?');
     params.push(status);
@@ -43,7 +51,7 @@ router.get('/', auth, async (req, res) => {
   res.json(leads);
 });
 
-// ── POST /api/leads — einzelnen Lead manuell anlegen (alle User) ────
+// ── POST /api/leads — einzelnen Lead manuell anlegen ────
 router.post('/', auth, async (req, res) => {
   const { company, ceo, email, phone, location, website, industry, notes } = req.body;
   if (!company?.trim()) return res.status(400).json({ error: 'Firmenname ist erforderlich' });
@@ -121,28 +129,24 @@ router.get('/:id', auth, async (req, res) => {
      WHERE l.id = ?`, [id]
   );
   if (!lead) return res.status(404).json({ error: 'Nicht gefunden' });
-  // Closer darf nur eigene oder unzugewiesene Leads lesen
-  if (req.user.role !== 'admin' && lead.assigned_to !== null && lead.assigned_to !== req.user.id)
+  if (!canView(req.user, lead))
     return res.status(403).json({ error: 'Kein Zugriff auf diesen Lead' });
 
-  // Comments
   const [comments] = await db.query(
     `SELECT c.*, u.full_name, u.username FROM comments c
      JOIN users u ON u.id = c.user_id
      WHERE c.lead_id = ? ORDER BY c.created_at ASC`, [id]
   );
-  // Reminders
   const [reminders] = await db.query(
     `SELECT r.*, u.full_name FROM reminders r
      JOIN users u ON u.id = r.user_id
      WHERE r.lead_id = ? ORDER BY r.remind_at ASC`, [id]
   );
-  // Call Logs
   const [call_logs] = await db.query(
     `SELECT cl.*, u.full_name FROM call_logs cl
      JOIN users u ON u.id = cl.user_id
      WHERE cl.lead_id = ? ORDER BY cl.started_at DESC`, [id]
-  );
+  ).catch(() => [[]]);
   res.json({ ...lead, comments, reminders, call_logs });
 });
 
@@ -155,9 +159,8 @@ router.patch('/:id/status', auth, async (req, res) => {
 
   const [[lead]] = await db.query('SELECT * FROM leads WHERE id = ?', [id]);
   if (!lead) return res.status(404).json({ error: 'Nicht gefunden' });
-
-  if (req.user.role !== 'admin' && lead.assigned_to !== null && lead.assigned_to !== req.user.id)
-    return res.status(403).json({ error: 'Nur eigene oder unzugewiesene Leads dürfen geändert werden' });
+  if (!canView(req.user, lead))
+    return res.status(403).json({ error: 'Kein Zugriff' });
 
   await db.query('UPDATE leads SET status = ? WHERE id = ?', [status, id]);
   await log(req.user.id, 'status_change', 'lead', id,
@@ -165,18 +168,27 @@ router.patch('/:id/status', auth, async (req, res) => {
   res.json({ ok: true });
 });
 
-// ── PATCH /api/leads/:id — Update (Admin: alles; Closer mit can_edit_contacts: nur phone/email) ──
+// ── PATCH /api/leads/:id — Update ──────────────────────────
 router.patch('/:id', auth, async (req, res) => {
   const id = parseInt(req.params.id);
   const isAdmin = req.user.role === 'admin';
   const canEditContacts = req.user.can_edit_contacts;
-  if (!isAdmin && !canEditContacts)
+  const canReassign = req.user.can_reassign_leads;
+
+  if (!isAdmin && !canEditContacts && !canReassign)
+    return res.status(403).json({ error: 'Kein Zugriff' });
+
+  const [[lead]] = await db.query('SELECT assigned_to FROM leads WHERE id=?', [id]);
+  if (!lead) return res.status(404).json({ error: 'Nicht gefunden' });
+  if (!isAdmin && !canView(req.user, lead))
     return res.status(403).json({ error: 'Kein Zugriff' });
 
   const allowed = isAdmin
-    ? ['company','ceo','email','phone','location','website',
-       'linkedin_url','industry','employees','revenue','notes','assigned_to','confidence']
-    : ['email','phone'];
+    ? ['company','ceo','email','phone','location','website','linkedin_url','industry','employees','revenue','notes','assigned_to','confidence']
+    : [
+        ...(canEditContacts ? ['email','phone'] : []),
+        ...(canReassign     ? ['assigned_to']   : []),
+      ];
 
   const updates = [];
   const params  = [];
@@ -190,16 +202,18 @@ router.patch('/:id', auth, async (req, res) => {
   res.json({ ok: true });
 });
 
-// ── DELETE /api/leads/:id (Admin) ────────────────────────────
-router.delete('/:id', auth, adminOnly, async (req, res) => {
+// ── DELETE /api/leads/:id ────────────────────────────────────
+router.delete('/:id', auth, async (req, res) => {
+  if (req.user.role !== 'admin' && !req.user.can_archive_leads)
+    return res.status(403).json({ error: 'Keine Berechtigung' });
+
   const id = parseInt(req.params.id);
   try {
     const [[lead]] = await db.query('SELECT id FROM leads WHERE id = ?', [id]);
     if (!lead) return res.status(404).json({ error: 'Lead nicht gefunden' });
-    // Abhängige Daten bereinigen (verhindert FK-Fehler und Waiseneinträge)
     await db.query('DELETE FROM comments  WHERE lead_id = ?', [id]);
     await db.query('DELETE FROM reminders WHERE lead_id = ?', [id]);
-    await db.query('UPDATE chat_rooms SET lead_id = NULL WHERE lead_id = ?', [id]);
+    await db.query('UPDATE chat_rooms SET lead_id = NULL WHERE lead_id = ?', [id]).catch(() => {});
     await db.query('DELETE FROM leads WHERE id = ?', [id]);
     await log(req.user.id, 'lead_delete', 'lead', id, null, req.ip);
     res.json({ ok: true });
@@ -217,6 +231,8 @@ router.post('/:id/comments', auth, async (req, res) => {
 
   const [[lead]] = await db.query('SELECT assigned_to FROM leads WHERE id=?', [leadId]);
   if (!lead) return res.status(404).json({ error: 'Lead nicht gefunden' });
+  if (!canView(req.user, lead))
+    return res.status(403).json({ error: 'Kein Zugriff' });
 
   const [r] = await db.query(
     'INSERT INTO comments (lead_id, user_id, text) VALUES (?,?,?)',
@@ -224,6 +240,36 @@ router.post('/:id/comments', auth, async (req, res) => {
   );
   await log(req.user.id, 'comment_add', 'lead', leadId, { text: text.trim() }, req.ip);
   res.status(201).json({ ok: true, id: r.insertId });
+});
+
+// ── PATCH /api/leads/:id/comments/:cid — Kommentar bearbeiten ──
+router.patch('/:id/comments/:cid', auth, async (req, res) => {
+  const cid = parseInt(req.params.cid);
+  const { text } = req.body;
+  if (!text?.trim()) return res.status(400).json({ error: 'Text fehlt' });
+  try {
+    const [[c]] = await db.query('SELECT * FROM comments WHERE id=?', [cid]);
+    if (!c) return res.status(404).json({ error: 'Kommentar nicht gefunden' });
+    if (req.user.role !== 'admin' && c.user_id !== req.user.id)
+      return res.status(403).json({ error: 'Nur eigene Kommentare bearbeitbar' });
+    await db.query('UPDATE comments SET text=?, edited_at=NOW() WHERE id=?', [text.trim(), cid]);
+    await log(req.user.id, 'comment_edit', 'lead', parseInt(req.params.id), { cid }, req.ip);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── DELETE /api/leads/:id/comments/:cid — Kommentar löschen ──
+router.delete('/:id/comments/:cid', auth, async (req, res) => {
+  const cid = parseInt(req.params.cid);
+  try {
+    const [[c]] = await db.query('SELECT * FROM comments WHERE id=?', [cid]);
+    if (!c) return res.status(404).json({ error: 'Kommentar nicht gefunden' });
+    if (req.user.role !== 'admin' && c.user_id !== req.user.id)
+      return res.status(403).json({ error: 'Nur eigene Kommentare löschbar' });
+    await db.query('DELETE FROM comments WHERE id=?', [cid]);
+    await log(req.user.id, 'comment_delete', 'lead', parseInt(req.params.id), { cid }, req.ip);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── POST /api/leads/:id/reminders ───────────────────────────
@@ -234,6 +280,8 @@ router.post('/:id/reminders', auth, async (req, res) => {
 
   const [[lead]] = await db.query('SELECT assigned_to FROM leads WHERE id=?', [leadId]);
   if (!lead) return res.status(404).json({ error: 'Lead nicht gefunden' });
+  if (!canView(req.user, lead))
+    return res.status(403).json({ error: 'Kein Zugriff' });
 
   const [r] = await db.query(
     'INSERT INTO reminders (lead_id, user_id, remind_at, note) VALUES (?,?,?,?)',
@@ -268,36 +316,6 @@ router.patch('/:id/assign', auth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── PATCH /api/leads/:id/comments/:cid — Kommentar bearbeiten ──
-router.patch('/:id/comments/:cid', auth, async (req, res) => {
-  const cid = parseInt(req.params.cid);
-  const { text } = req.body;
-  if (!text?.trim()) return res.status(400).json({ error: 'Text fehlt' });
-  try {
-    const [[c]] = await db.query('SELECT * FROM comments WHERE id=?', [cid]);
-    if (!c) return res.status(404).json({ error: 'Kommentar nicht gefunden' });
-    if (req.user.role !== 'admin' && c.user_id !== req.user.id)
-      return res.status(403).json({ error: 'Nur eigene Kommentare bearbeitbar' });
-    await db.query('UPDATE comments SET text=?, edited_at=NOW() WHERE id=?', [text.trim(), cid]);
-    await log(req.user.id, 'comment_edit', 'lead', parseInt(req.params.id), { cid }, req.ip);
-    res.json({ ok: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// ── DELETE /api/leads/:id/comments/:cid — Kommentar löschen ──
-router.delete('/:id/comments/:cid', auth, async (req, res) => {
-  const cid = parseInt(req.params.cid);
-  try {
-    const [[c]] = await db.query('SELECT * FROM comments WHERE id=?', [cid]);
-    if (!c) return res.status(404).json({ error: 'Kommentar nicht gefunden' });
-    if (req.user.role !== 'admin' && c.user_id !== req.user.id)
-      return res.status(403).json({ error: 'Nur eigene Kommentare löschbar' });
-    await db.query('DELETE FROM comments WHERE id=?', [cid]);
-    await log(req.user.id, 'comment_delete', 'lead', parseInt(req.params.id), { cid }, req.ip);
-    res.json({ ok: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
 // ── POST /api/leads/:id/email — E-Mail an Lead senden ────────
 router.post('/:id/email', auth, async (req, res) => {
   const id = parseInt(req.params.id);
@@ -307,8 +325,7 @@ router.post('/:id/email', auth, async (req, res) => {
   try {
     const [[lead]] = await db.query('SELECT * FROM leads WHERE id=?', [id]);
     if (!lead) return res.status(404).json({ error: 'Nicht gefunden' });
-
-    if (req.user.role !== 'admin' && lead.assigned_to !== null && lead.assigned_to !== req.user.id)
+    if (!canView(req.user, lead))
       return res.status(403).json({ error: 'E-Mail nur bei eigenen oder unzugewiesenen Leads erlaubt' });
 
     const [[user]] = await db.query('SELECT full_name FROM users WHERE id=?', [req.user.id]);
@@ -326,7 +343,7 @@ router.post('/:id/email', auth, async (req, res) => {
   }
 });
 
-// ── POST /api/leads/:id/calls/start — Anruf starten und loggen ─
+// ── POST /api/leads/:id/calls/start — Anruf starten ─
 router.post('/:id/calls/start', auth, async (req, res) => {
   const leadId = parseInt(req.params.id);
   try {
@@ -335,9 +352,7 @@ router.post('/:id/calls/start', auth, async (req, res) => {
     );
     if (!lead) return res.status(404).json({ error: 'Lead nicht gefunden' });
     if (!lead.phone) return res.status(400).json({ error: 'Keine Telefonnummer gespeichert' });
-
-    // Zugriff: Admin immer; Closer nur wenn Lead unzugewiesen oder eigener Lead
-    if (req.user.role !== 'admin' && lead.assigned_to !== null && lead.assigned_to !== req.user.id)
+    if (!canView(req.user, lead))
       return res.status(403).json({ error: 'Kein Zugriff auf diesen Lead' });
 
     const [r] = await db.query(

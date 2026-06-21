@@ -69,6 +69,7 @@
       <span class="nav-group-label">Ressourcen</span>
       <div class="nav-item" data-sec="wiki" onclick="showSection('wiki')"><i class="fas fa-book"></i> Wissensdatenbank</div>
       <div class="nav-item" data-sec="chat" onclick="showSection('chat')"><i class="fas fa-comments"></i> Rücksprachen <span id="chatBadge" style="display:none;margin-left:auto" class="badge">!</span></div>
+      <div class="nav-item" data-sec="feedback" onclick="showSection('feedback')"><i class="fas fa-flag"></i> Feedback / Wünsche</div>
     </nav>
     <div class="sidebar-user" id="sidebarUser"></div>
   </aside>
@@ -217,7 +218,43 @@
       </div>
     </div>
 
+    <!-- FEEDBACK -->
+    <div id="sec-feedback" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+        <h1 style="font-size:20px;font-weight:700">Feedback / Wünsche</h1>
+        <button class="btn btn-primary btn-sm" onclick="openFeedbackModal()"><i class="fas fa-plus"></i> Neu eintragen</button>
+      </div>
+      <div id="myFeedbackList"></div>
+    </div>
+
   </main>
+</div>
+
+<!-- FEEDBACK MODAL -->
+<div class="modal-overlay" id="feedbackModal" onclick="if(event.target===this)closeFeedbackModal()">
+  <div class="modal-box">
+    <h2><i class="fas fa-flag" style="color:var(--accent);margin-right:8px"></i> Feedback / Wunsch eintragen</h2>
+    <div class="form-group">
+      <label>Typ</label>
+      <select id="fb-type" class="form-control">
+        <option value="wunsch">Wunsch / Feature-Idee</option>
+        <option value="bug">Bug / Problem</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Titel *</label>
+      <input type="text" id="fb-title" class="form-control" placeholder="Kurze Beschreibung">
+    </div>
+    <div class="form-group">
+      <label>Details <span style="color:var(--text3);font-weight:400">(optional)</span></label>
+      <textarea id="fb-desc" class="form-control" rows="4" placeholder="Was genau soll verbessert werden / was funktioniert nicht?"></textarea>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btn-primary" style="flex:1" onclick="submitFeedback()"><i class="fas fa-check"></i> Absenden</button>
+      <button class="btn btn-ghost" onclick="closeFeedbackModal()">Abbrechen</button>
+    </div>
+    <div id="fbModalErr" style="color:var(--red);font-size:12px;margin-top:6px;text-align:center"></div>
+  </div>
 </div>
 
 <!-- LEAD DETAIL PANEL -->
@@ -269,6 +306,14 @@
 <script src="/shared/api.js"></script>
 <script>
 const ME = Auth.getUser();
+const CAN = {
+  editContacts: Auth.can('can_edit_contacts'),
+  archive:      Auth.can('can_archive_leads'),
+  reassign:     Auth.can('can_reassign_leads'),
+  viewAll:      Auth.can('can_view_all_leads'),
+  createUsers:  Auth.can('can_create_users'),
+  generateLeads:Auth.can('can_generate_leads'),
+};
 
 function copyPhone(phone) {
   navigator.clipboard.writeText(phone)
@@ -318,6 +363,7 @@ function showSection(name) {
   if (name === 'reminders') loadReminders();
   if (name === 'wiki')      loadWiki();
   if (name === 'chat')      loadChats();
+  if (name === 'feedback')  loadMyFeedback();
   if (name === 'myLeads') { const f = document.getElementById('mySearch'); if (f) f.value = ''; if (allLeads.length) filterMyLeads(); }
   if (name === 'allLeads')  { const f = document.getElementById('allSearch'); if (f) { f.value = ''; } if (allLeads.length) renderAllLeads(allLeads); }
 }
@@ -1519,6 +1565,65 @@ loadLeads();
 setInterval(loadReminders, 5 * 60 * 1000);
 checkReminderNotifications();
 setInterval(checkReminderNotifications, 2 * 60 * 1000);
+
+// ── FEEDBACK ──────────────────────────────────────────────────
+const FB_TAG_LABELS_C = { offen:'Offen', in_planung:'In Planung', erledigt:'Erledigt', nicht_moeglich:'Nicht möglich' };
+const FB_TAG_COLORS_C = { offen:'var(--accent)', in_planung:'var(--amber)', erledigt:'var(--green)', nicht_moeglich:'var(--red)' };
+
+async function loadMyFeedback() {
+  try {
+    const list = await api('GET', '/feedback');
+    const el = document.getElementById('myFeedbackList');
+    if (!list.length) { el.innerHTML = '<div style="color:var(--text3);padding:24px;text-align:center">Noch keine Einträge</div>'; return; }
+    el.innerHTML = list.map(f => `
+      <div class="card" style="padding:14px 16px;margin-bottom:10px">
+        <div style="display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+              <span style="font-size:11px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:1px 7px;color:var(--text3)">${f.type==='bug'?'Bug':'Wunsch'}</span>
+              <span style="font-size:11px;font-weight:700;color:${FB_TAG_COLORS_C[f.tag]||'var(--text3)'}">${FB_TAG_LABELS_C[f.tag]||f.tag}</span>
+              <span style="font-size:11px;color:var(--text3)">${escHtml(f.author_name||'Ich')} · ${fmtDateShort(f.created_at)}</span>
+            </div>
+            <div style="font-weight:600;margin-bottom:3px">${escHtml(f.title)}</div>
+            ${f.description ? `<div style="font-size:13px;color:var(--text2);white-space:pre-wrap">${escHtml(f.description)}</div>` : ''}
+            ${f.admin_note ? `<div style="margin-top:8px;padding:8px 10px;background:rgba(79,142,247,0.08);border-radius:8px;font-size:12px;color:var(--text2)"><b>Admin-Notiz:</b> ${escHtml(f.admin_note)}</div>` : ''}
+          </div>
+          ${f.user_id === ME?.id ? `<button class="btn btn-ghost btn-sm" style="color:var(--red);font-size:11px" onclick="deleteMyFeedback(${f.id})"><i class="fas fa-trash"></i></button>` : ''}
+        </div>
+      </div>
+    `).join('');
+  } catch(e) { showToast(e.message, 'err'); }
+}
+
+function openFeedbackModal() {
+  document.getElementById('fb-title').value = '';
+  document.getElementById('fb-desc').value = '';
+  document.getElementById('fb-type').value = 'wunsch';
+  document.getElementById('fbModalErr').textContent = '';
+  document.getElementById('feedbackModal').classList.add('open');
+}
+function closeFeedbackModal() { document.getElementById('feedbackModal').classList.remove('open'); }
+
+async function submitFeedback() {
+  const title = document.getElementById('fb-title').value.trim();
+  if (!title) { document.getElementById('fbModalErr').textContent = 'Titel ist erforderlich'; return; }
+  try {
+    await api('POST', '/feedback', {
+      title,
+      description: document.getElementById('fb-desc').value.trim() || null,
+      type: document.getElementById('fb-type').value,
+    });
+    showToast('Feedback gesendet');
+    closeFeedbackModal();
+    loadMyFeedback();
+  } catch(e) { document.getElementById('fbModalErr').textContent = e.message; }
+}
+
+async function deleteMyFeedback(id) {
+  if (!confirm('Eintrag löschen?')) return;
+  try { await api('DELETE', `/feedback/${id}`); loadMyFeedback(); }
+  catch(e) { showToast(e.message,'err'); }
+}
 </script>
 
 <!-- MODAL: Lead hinzufügen -->

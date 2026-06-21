@@ -9,8 +9,9 @@ const userRoutes     = require('./routes/users');
 const leadRoutes     = require('./routes/leads');
 const generateRoutes = require('./routes/generate');
 const wikiRoutes     = require('./routes/wiki');
-const chatRoutes          = require('./routes/chat');
-const callRoutes          = require('./routes/calls');
+const chatRoutes     = require('./routes/chat');
+const callRoutes     = require('./routes/calls');
+const feedbackRoutes = require('./routes/feedback');
 const { startReminderCron } = require('./cron/reminders');
 const cron           = require('node-cron');
 
@@ -48,6 +49,7 @@ app.use('/api/generate', generateRoutes);
 app.use('/api/wiki',     wikiRoutes);
 app.use('/api/chats',    chatRoutes);
 app.use('/api/calls',    callRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 // ── SPA Fallback ──────────────────────────────────────────────
 app.get('*', (req, res) => {
@@ -110,7 +112,23 @@ db.query(`CREATE TABLE IF NOT EXISTS chat_messages (
 )`).catch(() => {});
 
 db.query('ALTER TABLE chat_rooms ADD COLUMN lead_id INT NULL').catch(() => {});
-db.query('ALTER TABLE users ADD COLUMN can_edit_contacts TINYINT(1) NOT NULL DEFAULT 0').catch(() => {});
+db.query('ALTER TABLE users ADD COLUMN can_edit_contacts  TINYINT(1) NOT NULL DEFAULT 0').catch(() => {});
+db.query('ALTER TABLE users ADD COLUMN can_archive_leads  TINYINT(1) NOT NULL DEFAULT 0').catch(() => {});
+db.query('ALTER TABLE users ADD COLUMN can_reassign_leads TINYINT(1) NOT NULL DEFAULT 0').catch(() => {});
+db.query('ALTER TABLE users ADD COLUMN can_view_all_leads TINYINT(1) NOT NULL DEFAULT 0').catch(() => {});
+db.query('ALTER TABLE users ADD COLUMN can_create_users   TINYINT(1) NOT NULL DEFAULT 0').catch(() => {});
+db.query('ALTER TABLE users ADD COLUMN can_generate_leads TINYINT(1) NOT NULL DEFAULT 0').catch(() => {});
+
+db.query(`CREATE TABLE IF NOT EXISTS feedback (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  user_id     INT NOT NULL,
+  title       VARCHAR(300) NOT NULL,
+  description TEXT NULL,
+  type        ENUM('bug','wunsch') DEFAULT 'wunsch',
+  tag         ENUM('offen','in_planung','erledigt','nicht_moeglich') DEFAULT 'offen',
+  admin_note  TEXT NULL,
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)`).catch(() => {});
 
 // ── Call Logs ─────────────────────────────────────────────────
 db.query(`CREATE TABLE IF NOT EXISTS call_logs (

@@ -4,11 +4,15 @@ const db       = require('../db');
 const { auth, adminOnly } = require('../middleware/auth');
 const { log }  = require('../helpers/logger');
 
+const PERM_FIELDS = ['can_edit_contacts','can_archive_leads','can_reassign_leads','can_view_all_leads','can_create_users','can_generate_leads'];
+
 // GET /api/users — alle User (Admin)
 router.get('/', auth, adminOnly, async (req, res) => {
   const [users] = await db.query(
     `SELECT u.id, u.username, u.full_name, u.email, u.role, u.is_active,
-            u.last_login, u.created_at, u.can_edit_contacts,
+            u.last_login, u.created_at,
+            u.can_edit_contacts, u.can_archive_leads, u.can_reassign_leads,
+            u.can_view_all_leads, u.can_create_users, u.can_generate_leads,
             s.last_active, s.click_count, s.login_at AS session_start
      FROM users u
      LEFT JOIN sessions s ON s.user_id = u.id
@@ -17,76 +21,18 @@ router.get('/', auth, adminOnly, async (req, res) => {
   res.json(users);
 });
 
-// POST /api/users — neuen Closer anlegen (Admin)
-router.post('/', auth, adminOnly, async (req, res) => {
-  const { username, password, full_name, email, role } = req.body;
-  if (!username || !password || !full_name)
-    return res.status(400).json({ error: 'Name, Benutzername und Passwort sind erforderlich' });
+// GET /api/users/assignable — Kurzliste für Zuweisung (alle auth)
+router.get('/assignable', auth, async (req, res) => {
+  const [rows] = await db.query('SELECT id, full_name FROM users WHERE is_active=1 ORDER BY full_name');
+  res.json(rows);
+});
 
-  const emailVal = email && email.trim() ? email.trim() : null;
-
-  const [[existsUser]] = await db.query('SELECT id FROM users WHERE username = ?', [username]);
-  if (existsUser) return res.status(409).json({ error: 'Benutzername bereits vergeben' });
-
-  if (emailVal) {
-    const [[existsEmail]] = await db.query('SELECT id FROM users WHERE email = ?', [emailVal]);
-    if (existsEmail) return res.status(409).json({ error: 'E-Mail bereits vergeben' });
-  }
-
-  const hash = await bcrypt.hash(password, 12);
-  const [result] = await db.query(
-    'INSERT INTO users (username, password_hash, full_name, email, role) VALUES (?,?,?,?,?)',
-    [username, hash, full_name, emailVal, role === 'admin' ? 'admin' : 'closer']
+// GET /api/users/list — Kurzliste aller aktiven User (für Chat-Einladungen, alle Auth-User)
+router.get('/list', auth, async (req, res) => {
+  const [users] = await db.query(
+    `SELECT id, full_name, role FROM users WHERE is_active = 1 ORDER BY full_name ASC`
   );
-  await log(req.user.id, 'user_create', 'user', result.insertId, { username, role }, req.ip);
-  res.status(201).json({ ok: true, id: result.insertId });
-});
-
-// PATCH /api/users/:id — User bearbeiten (Admin)
-router.patch('/:id', auth, adminOnly, async (req, res) => {
-  const { username, full_name, email, password, is_active, role, can_edit_contacts } = req.body;
-  const id = parseInt(req.params.id);
-
-  if (username) {
-    const [[exists]] = await db.query('SELECT id FROM users WHERE username = ? AND id != ?', [username, id]);
-    if (exists) return res.status(409).json({ error: 'Benutzername bereits vergeben' });
-    await db.query('UPDATE users SET username=? WHERE id=?', [username, id]);
-  }
-  if (full_name) await db.query('UPDATE users SET full_name=? WHERE id=?', [full_name, id]);
-  if (email)     await db.query('UPDATE users SET email=? WHERE id=?', [email, id]);
-  if (role)      await db.query('UPDATE users SET role=? WHERE id=?', [role, id]);
-  if (is_active !== undefined)
-    await db.query('UPDATE users SET is_active=? WHERE id=?', [is_active ? 1 : 0, id]);
-  if (can_edit_contacts !== undefined)
-    await db.query('UPDATE users SET can_edit_contacts=? WHERE id=?', [can_edit_contacts ? 1 : 0, id]);
-  if (password) {
-    const hash = await bcrypt.hash(password, 12);
-    await db.query('UPDATE users SET password_hash=? WHERE id=?', [hash, id]);
-  }
-  await log(req.user.id, 'user_update', 'user', id, req.body, req.ip);
-  res.json({ ok: true });
-});
-
-// DELETE /api/users/:id (Admin, kann sich nicht selbst löschen)
-router.delete('/:id', auth, adminOnly, async (req, res) => {
-  const id = parseInt(req.params.id);
-  if (id === req.user.id) return res.status(400).json({ error: 'Eigenen Account nicht löschbar' });
-
-  try {
-    // Abhängige Einträge bereinigen (FK-Constraints ohne ON DELETE)
-    await db.query('DELETE FROM activity_log WHERE user_id = ?', [id]);
-    await db.query('DELETE FROM reminders    WHERE user_id = ?', [id]);
-    await db.query('DELETE FROM comments     WHERE user_id = ?', [id]);
-    // Leads dieses Users dem löschenden Admin übertragen
-    await db.query('UPDATE leads SET created_by  = ? WHERE created_by  = ?', [req.user.id, id]);
-    await db.query('UPDATE leads SET assigned_to = NULL WHERE assigned_to = ?', [id]);
-    await db.query('DELETE FROM users WHERE id = ?', [id]);
-    await log(req.user.id, 'user_delete', 'user', id, null, req.ip);
-    res.json({ ok: true });
-  } catch (e) {
-    console.error('User delete error:', e.message);
-    res.status(500).json({ error: 'Löschen fehlgeschlagen: ' + e.message });
-  }
+  res.json(users);
 });
 
 // GET /api/users/tracking — Echtzeit-Tracking aller Closer (Admin)
@@ -142,12 +88,61 @@ router.get('/activity/download', auth, adminOnly, async (req, res) => {
   res.send('﻿' + csv);
 });
 
-// GET /api/users/list — Kurzliste aller aktiven User (für Chat-Einladungen, alle Auth-User)
-router.get('/list', auth, async (req, res) => {
-  const [users] = await db.query(
-    `SELECT id, full_name, role FROM users WHERE is_active = 1 ORDER BY full_name ASC`
+// POST /api/users — neuen User anlegen (Admin oder can_create_users)
+router.post('/', auth, async (req, res) => {
+  if (req.user.role !== 'admin' && !req.user.can_create_users)
+    return res.status(403).json({ error: 'Keine Berechtigung' });
+
+  const { username, password, full_name, email, role } = req.body;
+  if (!username || !password || !full_name)
+    return res.status(400).json({ error: 'Name, Benutzername und Passwort sind erforderlich' });
+
+  const emailVal = email && email.trim() ? email.trim() : null;
+
+  const [[existsUser]] = await db.query('SELECT id FROM users WHERE username = ?', [username]);
+  if (existsUser) return res.status(409).json({ error: 'Benutzername bereits vergeben' });
+
+  if (emailVal) {
+    const [[existsEmail]] = await db.query('SELECT id FROM users WHERE email = ?', [emailVal]);
+    if (existsEmail) return res.status(409).json({ error: 'E-Mail bereits vergeben' });
+  }
+
+  const hash = await bcrypt.hash(password, 12);
+  const [result] = await db.query(
+    'INSERT INTO users (username, password_hash, full_name, email, role) VALUES (?,?,?,?,?)',
+    [username, hash, full_name, emailVal, role === 'admin' ? 'admin' : 'closer']
   );
-  res.json(users);
+  await log(req.user.id, 'user_create', 'user', result.insertId, { username, role }, req.ip);
+  res.status(201).json({ ok: true, id: result.insertId });
+});
+
+// PATCH /api/users/:id — User bearbeiten (Admin)
+router.patch('/:id', auth, adminOnly, async (req, res) => {
+  const { username, full_name, email, password, is_active, role } = req.body;
+  const id = parseInt(req.params.id);
+
+  if (username) {
+    const [[exists]] = await db.query('SELECT id FROM users WHERE username = ? AND id != ?', [username, id]);
+    if (exists) return res.status(409).json({ error: 'Benutzername bereits vergeben' });
+    await db.query('UPDATE users SET username=? WHERE id=?', [username, id]);
+  }
+  if (full_name) await db.query('UPDATE users SET full_name=? WHERE id=?', [full_name, id]);
+  if (email !== undefined) await db.query('UPDATE users SET email=? WHERE id=?', [email || null, id]);
+  if (role)      await db.query('UPDATE users SET role=? WHERE id=?', [role, id]);
+  if (is_active !== undefined)
+    await db.query('UPDATE users SET is_active=? WHERE id=?', [is_active ? 1 : 0, id]);
+  if (password) {
+    const hash = await bcrypt.hash(password, 12);
+    await db.query('UPDATE users SET password_hash=? WHERE id=?', [hash, id]);
+  }
+
+  for (const f of PERM_FIELDS) {
+    if (req.body[f] !== undefined)
+      await db.query(`UPDATE users SET ${f}=? WHERE id=?`, [req.body[f] ? 1 : 0, id]);
+  }
+
+  await log(req.user.id, 'user_update', 'user', id, req.body, req.ip);
+  res.json({ ok: true });
 });
 
 // PATCH /api/users/:id/notify — Benachrichtigungs-Präferenzen speichern
@@ -164,6 +159,26 @@ router.patch('/:id/notify', auth, async (req, res) => {
   params.push(id);
   await db.query(`UPDATE users SET ${updates.join(',')} WHERE id=?`, params);
   res.json({ ok: true });
+});
+
+// DELETE /api/users/:id (Admin, kann sich nicht selbst löschen)
+router.delete('/:id', auth, adminOnly, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (id === req.user.id) return res.status(400).json({ error: 'Eigenen Account nicht löschbar' });
+
+  try {
+    await db.query('DELETE FROM activity_log WHERE user_id = ?', [id]);
+    await db.query('DELETE FROM reminders    WHERE user_id = ?', [id]);
+    await db.query('DELETE FROM comments     WHERE user_id = ?', [id]);
+    await db.query('UPDATE leads SET created_by  = ? WHERE created_by  = ?', [req.user.id, id]);
+    await db.query('UPDATE leads SET assigned_to = NULL WHERE assigned_to = ?', [id]);
+    await db.query('DELETE FROM users WHERE id = ?', [id]);
+    await log(req.user.id, 'user_delete', 'user', id, null, req.ip);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('User delete error:', e.message);
+    res.status(500).json({ error: 'Löschen fehlgeschlagen: ' + e.message });
+  }
 });
 
 module.exports = router;

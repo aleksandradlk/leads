@@ -20,15 +20,18 @@ REGELN:
 - Lieber 3 echte Leads als 10 erfundene
 - Antworte NUR mit einem validen JSON-Array`;
 
-// POST /api/generate — KI-Lead-Generierung (nur Admin)
-router.post('/', auth, adminOnly, async (req, res) => {
+// POST /api/generate — KI-Lead-Generierung (Admin oder can_generate_leads)
+router.post('/', auth, async (req, res) => {
+  if (req.user.role !== 'admin' && !req.user.can_generate_leads)
+    return res.status(403).json({ error: 'Keine Berechtigung für Lead-Generierung' });
+
   const { query, location, size, max_leads, sources, fields, extra } = req.body;
   if (!query) return res.status(400).json({ error: 'Suchbegriff fehlt' });
 
   const apiKey = process.env.CLAUDE_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'Claude API Key nicht konfiguriert (.env)' });
 
-  const maxL = Math.min(parseInt(max_leads) || 10, 20);
+  const maxL = Math.min(parseInt(max_leads) || 10, 50);
   const srcList = Array.isArray(sources) ? sources.join(', ') : 'web';
 
   const userPrompt = `Recherchiere bis zu ${maxL} ECHTE Unternehmen:

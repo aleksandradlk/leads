@@ -70,6 +70,7 @@
       <span class="nav-group-label">Ressourcen</span>
       <div class="nav-item" onclick="showTab('wiki')"><i class="fas fa-book"></i> Wissensdatenbank</div>
       <div class="nav-item" onclick="showTab('chat')"><i class="fas fa-comments"></i> Rücksprachen</div>
+      <div class="nav-item" onclick="showTab('feedback')"><i class="fas fa-flag"></i> Feedback-Board</div>
     </nav>
     <div class="sidebar-user" id="sidebarUser"></div>
   </aside>
@@ -341,6 +342,24 @@
       </div>
     </div>
 
+    <!-- ── TAB: FEEDBACK-BOARD ───────────────────────── -->
+    <div id="tab-feedback" class="tab-panel">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+        <h1 style="font-size:20px;font-weight:700">Feedback-Board</h1>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <select id="fbTagFilter" class="form-control" style="width:160px" onchange="renderFeedbackList()">
+            <option value="">Alle Tags</option>
+            <option value="offen">Offen</option>
+            <option value="in_planung">In Planung</option>
+            <option value="erledigt">Erledigt</option>
+            <option value="nicht_moeglich">Nicht möglich</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="loadFeedback()"><i class="fas fa-sync"></i></button>
+        </div>
+      </div>
+      <div id="feedbackList"></div>
+    </div>
+
   </main>
 </div>
 
@@ -395,16 +414,39 @@
     <div class="form-group"><label>E-Mail <span style="color:var(--text3);font-weight:400">(optional)</span></label><input type="email" id="u-email" class="form-control" placeholder="z.B. name@firma.de"></div>
     <div class="form-group"><label>Passwort <span id="pwHint" style="color:var(--text3)">(leer = nicht ändern)</span></label><input type="password" id="u-password" class="form-control"></div>
     <div class="form-group"><label>Rolle</label>
-      <select id="u-role" class="form-control" onchange="toggleCanEditContactsRow()">
+      <select id="u-role" class="form-control" onchange="updatePermSection()">
         <option value="closer">Closer</option>
         <option value="admin">Admin</option>
       </select>
     </div>
-    <div id="canEditContactsRow" class="form-group" style="display:none;margin-bottom:4px">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
-        <input type="checkbox" id="u-can-edit-contacts" style="width:15px;height:15px;accent-color:var(--accent)">
-        <span>Darf Lead-Kontaktdaten (E-Mail/Telefon) bearbeiten</span>
-      </label>
+    <div id="permSection" style="display:none">
+      <div style="font-size:11px;font-weight:600;letter-spacing:1px;color:var(--text3);text-transform:uppercase;margin:12px 0 8px">Berechtigungen</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;font-size:13px">
+          <input type="checkbox" id="u-can-edit-contacts" style="width:15px;height:15px;accent-color:var(--accent)">
+          <span>Kontaktdaten bearbeiten (E-Mail / Telefon)</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;font-size:13px">
+          <input type="checkbox" id="u-can-archive-leads" style="width:15px;height:15px;accent-color:var(--accent)">
+          <span>Leads löschen</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;font-size:13px">
+          <input type="checkbox" id="u-can-reassign-leads" style="width:15px;height:15px;accent-color:var(--accent)">
+          <span>Leads neu zuweisen</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;font-size:13px">
+          <input type="checkbox" id="u-can-view-all-leads" style="width:15px;height:15px;accent-color:var(--accent)">
+          <span>Alle Leads sehen (nicht nur eigene)</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;font-size:13px">
+          <input type="checkbox" id="u-can-create-users" style="width:15px;height:15px;accent-color:var(--accent)">
+          <span>Neue Benutzer anlegen</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;font-size:13px">
+          <input type="checkbox" id="u-can-generate-leads" style="width:15px;height:15px;accent-color:var(--accent)">
+          <span>Leads generieren (KI)</span>
+        </label>
+      </div>
     </div>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary" style="flex:1" onclick="saveUser()"><i class="fas fa-check"></i> Speichern</button>
@@ -442,7 +484,7 @@ function showTab(name) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
-  const navMap = { leads: 0, myLeads: 1, generate: 2, users: 3, tracking: 4, wiki: 5, chat: 6 };
+  const navMap = { leads: 0, myLeads: 1, generate: 2, users: 3, tracking: 4, wiki: 5, chat: 6, feedback: 7 };
   const items = document.querySelectorAll('.nav-item');
   if (navMap[name] !== undefined) items[navMap[name]]?.classList.add('active');
   if (name === 'leads')    {
@@ -456,6 +498,7 @@ function showTab(name) {
   if (name === 'tracking') loadTracking();
   if (name === 'wiki')     loadWiki();
   if (name === 'chat')     loadChats();
+  if (name === 'feedback') loadFeedback();
 }
 
 // ── MEINE LEADS ───────────────────────────────────────────────
@@ -623,8 +666,8 @@ async function deleteLead(id) {
     await api('DELETE', `/leads/${id}`);
     showToast('Lead gelöscht');
     allLeads = allLeads.filter(l => l.id !== id);
-    renderAllLeads(allLeads);
-    updateAllStats(allLeads);
+    renderLeads(allLeads);
+    updateLeadStats(allLeads);
     if (_panelLead?.id === id) closeLeadPanel();
   } catch (e) { showToast(e.message, 'err'); }
 }
@@ -1013,7 +1056,15 @@ async function loadUsers() {
         <td style="font-weight:600">${escHtml(u.full_name)}</td>
         <td style="font-family:'JetBrains Mono',monospace;font-size:12px">${escHtml(u.username)}</td>
         <td style="font-size:12px">${u.email ? `<a href="mailto:${escHtml(u.email)}">${escHtml(u.email)}</a>` : '<span style="color:var(--text3)">—</span>'}</td>
-        <td><span class="role-badge ${u.role==='admin'?'rb-admin':'rb-closer'}">${u.role==='admin'?'Admin':'Closer'}</span>${u.role==='closer'&&u.can_edit_contacts?'<span style="font-size:10px;color:var(--text3);margin-left:5px" title="Darf Lead-Kontaktdaten bearbeiten"><i class="fas fa-edit"></i></span>':''}</td>
+        <td><span class="role-badge ${u.role==='admin'?'rb-admin':'rb-closer'}">${u.role==='admin'?'Admin':'Closer'}</span>${u.role==='closer'?[
+            [u.can_edit_contacts,'Kontaktdaten bearbeiten','fa-address-card'],
+            [u.can_archive_leads,'Leads löschen','fa-trash'],
+            [u.can_reassign_leads,'Leads zuweisen','fa-user-tag'],
+            [u.can_view_all_leads,'Alle Leads sehen','fa-eye'],
+            [u.can_create_users,'User anlegen','fa-user-plus'],
+            [u.can_generate_leads,'Leads generieren','fa-robot'],
+          ].filter(p=>p[0]).map(p=>`<span style="font-size:10px;color:var(--text3);margin-left:4px" title="${p[1]}"><i class="fas ${p[2]}"></i></span>`).join(''):''}
+        </td>
         <td><span style="color:${u.is_active?'var(--green)':'var(--red)'};font-size:12px">${u.is_active?'Aktiv':'Gesperrt'}</span></td>
         <td style="font-size:12px;color:var(--text3)">${fmtDate(u.last_login)}</td>
         <td style="display:flex;gap:6px">
@@ -1038,10 +1089,13 @@ async function loadUsers() {
   } catch (e) { showToast(e.message, 'err'); }
 }
 
-function toggleCanEditContactsRow() {
-  const row = document.getElementById('canEditContactsRow');
-  row.style.display = document.getElementById('u-role').value === 'closer' ? 'block' : 'none';
+function updatePermSection() {
+  const isCloser = document.getElementById('u-role').value === 'closer';
+  document.getElementById('permSection').style.display = isCloser ? 'block' : 'none';
 }
+
+const PERM_IDS = ['u-can-edit-contacts','u-can-archive-leads','u-can-reassign-leads','u-can-view-all-leads','u-can-create-users','u-can-generate-leads'];
+const PERM_KEYS = ['can_edit_contacts','can_archive_leads','can_reassign_leads','can_view_all_leads','can_create_users','can_generate_leads'];
 
 function openUserModal(id) {
   editingUserId = id || null;
@@ -1056,14 +1110,16 @@ function openUserModal(id) {
       document.getElementById('u-email').value    = u.email || '';
       document.getElementById('u-role').value     = u.role;
       document.getElementById('u-password').value = '';
-      document.getElementById('u-can-edit-contacts').checked = !!u.can_edit_contacts;
+      PERM_IDS.forEach((elId, i) => {
+        document.getElementById(elId).checked = !!u[PERM_KEYS[i]];
+      });
     }
   } else {
-    ['u-name','u-username','u-email','u-password'].forEach(id => document.getElementById(id).value = '');
+    ['u-name','u-username','u-email','u-password'].forEach(fid => document.getElementById(fid).value = '');
     document.getElementById('u-role').value = 'closer';
-    document.getElementById('u-can-edit-contacts').checked = false;
+    PERM_IDS.forEach(elId => document.getElementById(elId).checked = false);
   }
-  toggleCanEditContactsRow();
+  updatePermSection();
   document.getElementById('userModal').classList.add('open');
 }
 function closeUserModal() { document.getElementById('userModal').classList.remove('open'); }
@@ -1076,8 +1132,10 @@ async function saveUser() {
     email:     document.getElementById('u-email').value.trim(),
     role,
     password:  document.getElementById('u-password').value || undefined,
-    can_edit_contacts: role === 'closer' ? (document.getElementById('u-can-edit-contacts').checked ? 1 : 0) : 0,
   };
+  PERM_KEYS.forEach((key, i) => {
+    body[key] = (role === 'closer' && document.getElementById(PERM_IDS[i]).checked) ? 1 : 0;
+  });
   const err = document.getElementById('userModalErr');
   try {
     if (editingUserId) { await api('PATCH', `/users/${editingUserId}`, body); }
@@ -1798,6 +1856,63 @@ showTab('leads');
 loadClosersForSelect();
 checkReminderNotifications();
 setInterval(checkReminderNotifications, 2 * 60 * 1000);
+
+// ── FEEDBACK-BOARD ────────────────────────────────────────────
+let allFeedback = [];
+const FB_TAG_LABELS = { offen:'Offen', in_planung:'In Planung', erledigt:'Erledigt', nicht_moeglich:'Nicht möglich' };
+const FB_TAG_COLORS = { offen:'var(--accent)', in_planung:'var(--amber)', erledigt:'var(--green)', nicht_moeglich:'var(--red)' };
+const FB_TYPE_LABELS = { bug:'Bug', wunsch:'Wunsch' };
+
+async function loadFeedback() {
+  try {
+    allFeedback = await api('GET', '/feedback');
+    renderFeedbackList();
+  } catch(e) { showToast(e.message, 'err'); }
+}
+
+function renderFeedbackList() {
+  const filter = document.getElementById('fbTagFilter')?.value || '';
+  const list = filter ? allFeedback.filter(f => f.tag === filter) : allFeedback;
+  const el = document.getElementById('feedbackList');
+  if (!list.length) { el.innerHTML = '<div style="color:var(--text3);padding:24px;text-align:center">Keine Einträge</div>'; return; }
+  el.innerHTML = list.map(f => `
+    <div class="card" style="padding:16px;margin-bottom:10px">
+      <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+            <span style="font-size:11px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:1px 7px;color:var(--text3)">${escHtml(FB_TYPE_LABELS[f.type]||f.type)}</span>
+            <span style="font-size:11px;font-weight:700;color:${FB_TAG_COLORS[f.tag]||'var(--text3)'}">${escHtml(FB_TAG_LABELS[f.tag]||f.tag)}</span>
+            <span style="font-size:11px;color:var(--text3)">${escHtml(f.author_name||'?')} · ${fmtDateShort(f.created_at)}</span>
+          </div>
+          <div style="font-weight:600;margin-bottom:4px">${escHtml(f.title)}</div>
+          ${f.description ? `<div style="font-size:13px;color:var(--text2);white-space:pre-wrap">${escHtml(f.description)}</div>` : ''}
+          ${f.admin_note ? `<div style="margin-top:8px;padding:8px 10px;background:rgba(79,142,247,0.08);border-radius:8px;font-size:12px;color:var(--text2)"><b>Admin-Notiz:</b> ${escHtml(f.admin_note)}</div>` : ''}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;min-width:160px">
+          <select class="form-control" style="font-size:12px" onchange="updateFeedbackTag(${f.id},this.value)">
+            ${Object.entries(FB_TAG_LABELS).map(([v,l])=>`<option value="${v}"${f.tag===v?' selected':''}>${l}</option>`).join('')}
+          </select>
+          <input type="text" class="form-control" style="font-size:12px" placeholder="Admin-Notiz..." value="${escHtml(f.admin_note||'')}" onblur="updateFeedbackNote(${f.id},this.value)" onkeydown="if(event.key==='Enter')this.blur()">
+          <button class="btn btn-ghost btn-sm" style="color:var(--red);font-size:11px" onclick="deleteFeedback(${f.id})"><i class="fas fa-trash"></i> Löschen</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function updateFeedbackTag(id, tag) {
+  try { await api('PATCH', `/feedback/${id}`, { tag }); const f = allFeedback.find(x=>x.id===id); if(f) f.tag=tag; renderFeedbackList(); }
+  catch(e) { showToast(e.message,'err'); }
+}
+async function updateFeedbackNote(id, note) {
+  try { await api('PATCH', `/feedback/${id}`, { admin_note: note }); const f = allFeedback.find(x=>x.id===id); if(f) f.admin_note=note; }
+  catch(e) { showToast(e.message,'err'); }
+}
+async function deleteFeedback(id) {
+  if (!confirm('Eintrag löschen?')) return;
+  try { await api('DELETE', `/feedback/${id}`); allFeedback = allFeedback.filter(x=>x.id!==id); renderFeedbackList(); }
+  catch(e) { showToast(e.message,'err'); }
+}
 </script>
 
 <!-- MODAL: Lead manuell hinzufügen -->

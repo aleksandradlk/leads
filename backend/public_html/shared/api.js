@@ -17,6 +17,12 @@ const Auth = {
     localStorage.removeItem('lh_user');
   },
   isAdmin() { return this.getUser()?.role === 'admin'; },
+  can(perm) {
+    const user = this.getUser();
+    if (!user) return false;
+    if (user.role === 'admin') return true;
+    return !!user[perm];
+  },
   requireAuth() {
     if (!this.getToken()) { window.location.href = '/login.html'; return false; }
     return true;
