@@ -34,6 +34,11 @@ router.get('/', auth, async (req, res) => {
   if (where.length) q += ' WHERE ' + where.join(' AND ');
   q += ' ORDER BY l.created_at DESC';
 
+  const limit  = Math.min(parseInt(req.query.limit)  || 500, 1000);
+  const offset = Math.max(parseInt(req.query.offset) || 0, 0);
+  q += ' LIMIT ? OFFSET ?';
+  params.push(limit, offset);
+
   const [leads] = await db.query(q, params);
   res.json(leads);
 });

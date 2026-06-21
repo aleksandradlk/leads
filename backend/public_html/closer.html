@@ -305,6 +305,7 @@ function showSection(name) {
   document.querySelectorAll('.nav-item[data-sec]').forEach(el => {
     el.classList.toggle('active', el.dataset.sec === name);
   });
+  if (name !== 'chat') { clearInterval(chatPollTimer); chatPollTimer = null; }
   if (name === 'reminders') loadReminders();
   if (name === 'wiki')      loadWiki();
   if (name === 'chat')      loadChats();
@@ -525,8 +526,17 @@ function updateAllStats(leads) {
 }
 
 async function quickStatus(id, status) {
-  try { await api('PATCH', `/leads/${id}/status`, { status }); loadLeads(); }
-  catch (e) { showToast(e.message, 'err'); }
+  try {
+    await api('PATCH', `/leads/${id}/status`, { status });
+    const lead = allLeads.find(l => l.id === id);
+    if (lead) { lead.status = status; lead.updated_at = new Date().toISOString(); }
+    filterMyLeads();
+    renderAllLeads(allLeads);
+    updateMyStats(myLeads());
+    updateAllStats(allLeads);
+    updateReminderBadge();
+    showToast('Status aktualisiert ✓');
+  } catch (e) { showToast(e.message, 'err'); }
 }
 
 async function assignToMe(id) {
