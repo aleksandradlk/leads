@@ -2,7 +2,7 @@ const router = require('express').Router();
 const db     = require('../db');
 const { auth } = require('../middleware/auth');
 
-const VALID_STATUSES = ['completed','no-answer','busy','failed','manual'];
+const VALID_STATUSES = ['reached','no-answer','busy','failed','wrong_number'];
 
 // ── PATCH /api/calls/:id — Call-Log nach Gespräch aktualisieren
 router.patch('/:id', auth, async (req, res) => {

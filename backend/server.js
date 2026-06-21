@@ -122,10 +122,12 @@ db.query(`CREATE TABLE IF NOT EXISTS call_logs (
   started_at       DATETIME,
   ended_at         DATETIME NULL,
   duration_seconds INT NULL,
-  status           ENUM('started','completed','no-answer','busy','failed','manual') DEFAULT 'started',
+  status           ENUM('started','reached','no-answer','busy','failed','wrong_number') DEFAULT 'started',
   note             TEXT NULL,
   created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )`).catch(() => {});
+// ENUM erweitern falls Tabelle bereits existiert (idempotent — Fehler = bereits aktuell)
+db.query(`ALTER TABLE call_logs MODIFY COLUMN status ENUM('started','reached','no-answer','busy','failed','wrong_number') DEFAULT 'started'`).catch(() => {});
 
 // ── Index-Migrationen (idempotent — Fehler = Index existiert bereits) ────────
 db.query('CREATE INDEX idx_leads_status     ON leads (status)').catch(() => {});

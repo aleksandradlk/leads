@@ -669,14 +669,18 @@ async function startCallCl(leadId, phone) {
   } catch(e) {
     showToast(e.message, 'err'); return;
   }
-  window.location.href = `tel:${phone}`;
-  setTimeout(() => {
-    document.getElementById('callDocStatusCl').value   = 'completed';
-    document.getElementById('callDocDurationCl').value = '';
-    document.getElementById('callDocNoteCl').value     = '';
-    document.getElementById('callDocErrorCl').textContent = '';
-    document.getElementById('callDocModalCl').classList.add('open');
-  }, 600);
+  // Modal zuerst öffnen — CRM-Tab bleibt sichtbar
+  document.getElementById('callDocStatusCl').value   = 'reached';
+  document.getElementById('callDocDurationCl').value = '';
+  document.getElementById('callDocNoteCl').value     = '';
+  document.getElementById('callDocErrorCl').textContent = '';
+  document.getElementById('callDocModalCl').classList.add('open');
+  // tel: über temporäres <a> auslösen — kein window.location-Wechsel
+  const a = document.createElement('a');
+  a.href = `tel:${phone}`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 function closeCallDocModalCl() {
@@ -712,8 +716,8 @@ async function saveCallDocCl() {
 
 function renderCallLogsCl(logs) {
   if (!logs || !logs.length) return '';
-  const LABELS = { completed:'Gespräch geführt', 'no-answer':'Nicht abgenommen', busy:'Besetzt', failed:'Fehlgeschlagen', manual:'Manuell', started:'Gestartet' };
-  const COLORS = { completed:'var(--green)', 'no-answer':'var(--amber)', busy:'var(--amber)', failed:'var(--red)', manual:'var(--text3)', started:'var(--text3)' };
+  const LABELS = { reached:'Erreicht', 'no-answer':'Nicht erreicht', busy:'Besetzt', failed:'Fehlgeschlagen', wrong_number:'Falsche Nummer', started:'Gestartet' };
+  const COLORS = { reached:'var(--green)', 'no-answer':'var(--amber)', busy:'var(--amber)', failed:'var(--red)', wrong_number:'var(--red)', started:'var(--text3)' };
   return `<div style="margin-top:12px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px">Anrufe</div>` +
     logs.map(c => `<div style="display:flex;gap:8px;align-items:flex-start;padding:7px 10px;background:var(--bg3);border-radius:6px;border-left:2px solid ${COLORS[c.status]||'var(--text3)'};margin-bottom:5px;font-size:12px">
       <div style="flex:1">
@@ -1675,13 +1679,18 @@ document.getElementById('editContactInputCl')?.addEventListener('keydown', funct
       <button onclick="closeCallDocModalCl()" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;width:32px;height:32px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px"><i class="fas fa-times"></i></button>
     </div>
     <div style="padding:20px 28px 24px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3)">
+        <i class="fas fa-mobile-alt" style="flex-shrink:0"></i>
+        Der Anruf läuft über deine Standard-Telefon-App. Deine Absendernummer kommt aus dieser App.
+      </div>
       <div class="form-group" style="margin:0">
         <label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:6px">Ergebnis</label>
         <select id="callDocStatusCl" class="form-control">
-          <option value="completed">Gespräch geführt</option>
-          <option value="no-answer">Nicht abgenommen</option>
+          <option value="reached">Erreicht</option>
+          <option value="no-answer">Nicht erreicht</option>
           <option value="busy">Besetzt</option>
           <option value="failed">Fehlgeschlagen</option>
+          <option value="wrong_number">Falsche Nummer</option>
         </select>
       </div>
       <div class="form-group" style="margin:0">
