@@ -662,7 +662,7 @@ function editLeadContact(leadId, field, current) {
 function renderPanelKeyInfo(l) {
   const lastNote = (l.comments||[]).length ? l.comments[l.comments.length - 1] : null;
   const lastActivity = lastNote && lastNote.created_at > (l.updated_at||'') ? lastNote.created_at : (l.updated_at||l.created_at);
-  const editBtn = (field, val) => `<button onclick="editLeadContact(${l.id},'${field}',${JSON.stringify(val||'')})" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:1px 5px;font-size:11px;flex-shrink:0;line-height:1" title="Bearbeiten"><i class="fas fa-edit"></i></button>`;
+  const editBtn = (field, val) => `<button onclick="editLeadContact(${l.id},'${field}',${escHtml(JSON.stringify(val||''))})" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:1px 5px;font-size:11px;flex-shrink:0;line-height:1" title="Bearbeiten"><i class="fas fa-edit"></i></button>`;
   const contactItems = [
     l.ceo   ? `<div style="display:flex;align-items:center;gap:8px;font-size:13px"><i class="fas fa-user" style="color:var(--text3);width:14px;text-align:center;flex-shrink:0"></i><span>${escHtml(l.ceo)}</span></div>` : '',
     `<div style="display:flex;align-items:center;gap:8px;font-size:13px"><i class="fas fa-phone" style="color:var(--text3);width:14px;text-align:center;flex-shrink:0"></i>${l.phone ? `<a href="tel:${escHtml(l.phone)}" style="color:var(--accent)">${escHtml(l.phone)}</a>` : `<span style="color:var(--text3);font-size:12px">—</span>`}${editBtn('phone', l.phone)}</div>`,
