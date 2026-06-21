@@ -134,7 +134,13 @@ router.get('/:id', auth, async (req, res) => {
      JOIN users u ON u.id = r.user_id
      WHERE r.lead_id = ? ORDER BY r.remind_at ASC`, [id]
   );
-  res.json({ ...lead, comments, reminders });
+  // Call Logs
+  const [call_logs] = await db.query(
+    `SELECT cl.*, u.full_name FROM call_logs cl
+     JOIN users u ON u.id = cl.user_id
+     WHERE cl.lead_id = ? ORDER BY cl.started_at DESC`, [id]
+  );
+  res.json({ ...lead, comments, reminders, call_logs });
 });
 
 // ── PATCH /api/leads/:id/status ──────────────────────────────
@@ -175,12 +181,6 @@ router.patch('/:id', auth, async (req, res) => {
     if (req.body[k] !== undefined) { updates.push(`${k}=?`); params.push(req.body[k]); }
   }
   if (!updates.length) return res.status(400).json({ error: 'Nichts zu aktualisieren' });
-  // Wenn Telefonnummer geändert wird → Verifizierung zurücksetzen
-  if (req.body.phone !== undefined) {
-    updates.push('phone_verified=0','phone_verified_at=NULL',
-                 'phone_verify_code_hash=NULL','phone_verify_expires_at=NULL',
-                 'phone_verify_attempts=0');
-  }
   params.push(id);
   await db.query(`UPDATE leads SET ${updates.join(',')} WHERE id=?`, params);
   await log(req.user.id, 'lead_update', 'lead', id, req.body, req.ip);
@@ -320,6 +320,33 @@ router.post('/:id/email', auth, async (req, res) => {
   } catch(e) {
     console.error('Email send error:', e.message);
     res.status(500).json({ error: 'E-Mail konnte nicht gesendet werden: ' + e.message });
+  }
+});
+
+// ── POST /api/leads/:id/calls/start — Anruf starten und loggen ─
+router.post('/:id/calls/start', auth, async (req, res) => {
+  const leadId = parseInt(req.params.id);
+  try {
+    const [[lead]] = await db.query(
+      'SELECT id, phone, assigned_to FROM leads WHERE id=?', [leadId]
+    );
+    if (!lead) return res.status(404).json({ error: 'Lead nicht gefunden' });
+    if (!lead.phone) return res.status(400).json({ error: 'Keine Telefonnummer gespeichert' });
+
+    // Zugriff: Admin immer; Closer nur wenn Lead unzugewiesen oder eigener Lead
+    if (req.user.role !== 'admin' && lead.assigned_to !== null && lead.assigned_to !== req.user.id)
+      return res.status(403).json({ error: 'Kein Zugriff auf diesen Lead' });
+
+    const [r] = await db.query(
+      `INSERT INTO call_logs (lead_id, user_id, phone_number, direction, started_at, status)
+       VALUES (?, ?, ?, 'outbound', NOW(), 'started')`,
+      [leadId, req.user.id, lead.phone]
+    );
+    await log(req.user.id, 'call_started', 'lead', leadId, { phone: lead.phone }, req.ip);
+    res.status(201).json({ ok: true, id: r.insertId });
+  } catch(e) {
+    console.error('call start error:', e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 

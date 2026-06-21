@@ -106,6 +106,15 @@ CREATE TABLE IF NOT EXISTS sessions (
 ) ENGINE=InnoDB;
 
 -- ------------------------------------------------------------
+-- INDEXES (Performance bei 10.000+ Leads)
+-- ------------------------------------------------------------
+CREATE INDEX IF NOT EXISTS idx_leads_status        ON leads (status);
+CREATE INDEX IF NOT EXISTS idx_leads_created_at    ON leads (created_at);
+CREATE INDEX IF NOT EXISTS idx_leads_updated_at    ON leads (updated_at);
+CREATE INDEX IF NOT EXISTS idx_rem_user_sent_time  ON reminders (user_id, sent, remind_at);
+CREATE INDEX IF NOT EXISTS idx_activity_created_at ON activity_log (created_at);
+
+-- ------------------------------------------------------------
 -- Standard-Admin anlegen (Passwort wird beim ersten Start gesetzt)
 -- ------------------------------------------------------------
 -- Admin-Account wird über /api/setup erstellt beim ersten Start

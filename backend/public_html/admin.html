@@ -698,77 +698,83 @@ async function saveEditContact() {
   }
 }
 
-// ── Telefon-Verifizierung ──────────────────────────────────────
-let _verifyLeadId = null;
+// ── Call-Logging ───────────────────────────────────────────────
+let _activeCallId = null, _activeCallLeadId = null;
 
-function openPhoneVerify(leadId) {
-  _verifyLeadId = leadId;
-  const lead = _panelLead?.id === leadId ? _panelLead : allLeads.find(l => l.id === leadId);
-  document.getElementById('pvPhone').textContent = lead?.phone || '';
-  document.getElementById('pvStep1').style.display = '';
-  document.getElementById('pvStep2').style.display = 'none';
-  document.getElementById('pvError').textContent = '';
-  document.getElementById('pvSendBtn').disabled = false;
-  document.getElementById('phoneVerifyModal').classList.add('open');
-}
-
-function closePhoneVerifyModal() {
-  document.getElementById('phoneVerifyModal').classList.remove('open');
-  _verifyLeadId = null;
-}
-
-async function pvSendSms() {
-  const btn = document.getElementById('pvSendBtn');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sende...';
-  document.getElementById('pvError').textContent = '';
+async function startCall(leadId, phone) {
   try {
-    await api('POST', `/leads/${_verifyLeadId}/phone-verification/start`);
-    document.getElementById('pvStep1').style.display = 'none';
-    document.getElementById('pvStep2').style.display = '';
-    document.getElementById('pvCode').value = '';
-    setTimeout(() => document.getElementById('pvCode').focus(), 80);
+    const r = await api('POST', `/leads/${leadId}/calls/start`);
+    _activeCallId     = r.id;
+    _activeCallLeadId = leadId;
   } catch(e) {
-    document.getElementById('pvError').textContent = e.message;
-    btn.disabled = false;
-  } finally {
-    btn.innerHTML = '<i class="fas fa-paper-plane"></i> SMS senden';
+    showToast(e.message, 'err'); return;
   }
+  window.location.href = `tel:${phone}`;
+  // Modal kurz verzögert öffnen — tel: Link braucht einen Moment
+  setTimeout(() => {
+    document.getElementById('callDocStatus').value  = 'completed';
+    document.getElementById('callDocDuration').value = '';
+    document.getElementById('callDocNote').value    = '';
+    document.getElementById('callDocError').textContent = '';
+    document.getElementById('callDocModal').classList.add('open');
+  }, 600);
 }
 
-async function pvConfirm() {
-  const code = document.getElementById('pvCode').value.trim();
-  if (!/^\d{6}$/.test(code)) { document.getElementById('pvError').textContent = 'Bitte 6-stelligen Code eingeben.'; return; }
-  const btn = document.getElementById('pvConfirmBtn');
-  btn.disabled = true;
-  document.getElementById('pvError').textContent = '';
+function closeCallDocModal() {
+  document.getElementById('callDocModal').classList.remove('open');
+  _activeCallId = null; _activeCallLeadId = null;
+}
+
+async function saveCallDoc() {
+  if (!_activeCallId) return;
+  const status   = document.getElementById('callDocStatus').value;
+  const durVal   = document.getElementById('callDocDuration').value.trim();
+  const note     = document.getElementById('callDocNote').value.trim();
+  const dur      = durVal ? parseInt(durVal) * 60 : null;
+  const btn      = document.getElementById('callDocSaveBtn');
+  btn.disabled   = true;
   try {
-    await api('POST', `/leads/${_verifyLeadId}/phone-verification/confirm`, { code });
-    showToast('Telefonnummer verifiziert ✓');
-    if (_panelLead && _panelLead.id === _verifyLeadId) {
-      _panelLead.phone_verified = 1;
-      document.getElementById('panelKeyInfo').innerHTML = renderPanelKeyInfo(_panelLead);
+    await api('PATCH', `/calls/${_activeCallId}`, { status, duration_seconds: dur, note: note || null });
+    showToast('Anruf gespeichert ✓');
+    // Call-Log im Panel hinzufügen ohne Reload
+    if (_panelLead && _panelLead.id === _activeCallLeadId) {
+      if (!_panelLead.call_logs) _panelLead.call_logs = [];
+      _panelLead.call_logs.unshift({
+        id: _activeCallId, status, duration_seconds: dur, note: note || null,
+        phone_number: _panelLead.phone, started_at: new Date().toISOString(),
+        full_name: ME?.full_name || ''
+      });
+      document.getElementById('callLogSection').innerHTML = renderCallLogs(_panelLead.call_logs);
     }
-    const l = allLeads.find(l => l.id === _verifyLeadId);
-    if (l) l.phone_verified = 1;
-    closePhoneVerifyModal();
+    closeCallDocModal();
   } catch(e) {
-    document.getElementById('pvError').textContent = e.message;
-  } finally {
-    btn.disabled = false;
-  }
+    document.getElementById('callDocError').textContent = e.message;
+  } finally { btn.disabled = false; }
+}
+
+function renderCallLogs(logs) {
+  if (!logs || !logs.length) return '';
+  const LABELS = { completed:'Gespräch geführt', 'no-answer':'Nicht abgenommen', busy:'Besetzt', failed:'Fehlgeschlagen', manual:'Manuell', started:'Gestartet' };
+  const COLORS = { completed:'var(--green)', 'no-answer':'var(--amber)', busy:'var(--amber)', failed:'var(--red)', manual:'var(--text3)', started:'var(--text3)' };
+  return `<div style="margin-top:12px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:6px">Anrufe</div>` +
+    logs.map(c => `<div style="display:flex;gap:8px;align-items:flex-start;padding:7px 10px;background:var(--bg3);border-radius:6px;border-left:2px solid ${COLORS[c.status]||'var(--text3)'};margin-bottom:5px;font-size:12px">
+      <div style="flex:1">
+        <span style="font-weight:600;color:${COLORS[c.status]||'var(--text)'}">${LABELS[c.status]||c.status}</span>
+        ${c.duration_seconds ? `<span style="color:var(--text3);margin-left:8px">${Math.round(c.duration_seconds/60)} Min</span>` : ''}
+        <span style="color:var(--text3);float:right">${fmtDate(c.started_at)}</span>
+        ${c.note ? `<div style="color:var(--text2);margin-top:3px">${escHtml(c.note)}</div>` : ''}
+      </div>
+    </div>`).join('') + '</div>';
 }
 
 function renderPanelKeyInfo(l) {
   const lastNote = (l.comments||[]).length ? l.comments[l.comments.length - 1] : null;
   const lastActivity = lastNote && lastNote.created_at > (l.updated_at||'') ? lastNote.created_at : (l.updated_at||l.created_at);
   const editBtn = (field, val) => `<button onclick="editLeadContact(${l.id},'${field}',${escHtml(JSON.stringify(val||''))})" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:1px 5px;font-size:11px;flex-shrink:0;line-height:1" title="Bearbeiten"><i class="fas fa-edit"></i></button>`;
-  const verifyBadge = l.phone_verified
-    ? `<span style="color:var(--green);font-size:11px;font-weight:600;flex-shrink:0"><i class="fas fa-check-circle"></i> Verifiziert</span>`
-    : (l.phone ? `<button onclick="openPhoneVerify(${l.id})" style="background:none;border:1px solid var(--border2);border-radius:5px;cursor:pointer;color:var(--text3);padding:2px 7px;font-size:11px;flex-shrink:0;white-space:nowrap"><i class="fas fa-shield-alt"></i> Verifizieren</button>` : '');
+  const callBtn = l.phone ? `<button onclick="startCall(${l.id},'${escHtml(l.phone)}')" style="background:none;border:1px solid var(--green);border-radius:5px;cursor:pointer;color:var(--green);padding:2px 8px;font-size:11px;flex-shrink:0;white-space:nowrap;font-weight:600" title="Anrufen"><i class="fas fa-phone"></i> Anrufen</button>` : '';
   const contactItems = [
     l.ceo   ? `<div style="display:flex;align-items:center;gap:8px;font-size:13px"><i class="fas fa-user" style="color:var(--text3);width:14px;text-align:center;flex-shrink:0"></i><span>${escHtml(l.ceo)}</span></div>` : '',
-    `<div style="display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap"><i class="fas fa-phone" style="color:var(--text3);width:14px;text-align:center;flex-shrink:0"></i>${l.phone ? `<a href="tel:${escHtml(l.phone)}" style="color:var(--accent)">${escHtml(l.phone)}</a>` : `<span style="color:var(--text3);font-size:12px">—</span>`}${editBtn('phone', l.phone)}${verifyBadge}</div>`,
+    `<div style="display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap"><i class="fas fa-phone" style="color:var(--text3);width:14px;text-align:center;flex-shrink:0"></i>${l.phone ? `<a href="tel:${escHtml(l.phone)}" style="color:var(--accent)">${escHtml(l.phone)}</a>` : `<span style="color:var(--text3);font-size:12px">—</span>`}${editBtn('phone', l.phone)}${callBtn}</div>`,
     `<div style="display:flex;align-items:center;gap:8px;font-size:13px"><i class="fas fa-envelope" style="color:var(--text3);width:14px;text-align:center;flex-shrink:0"></i>${l.email ? `<a href="mailto:${escHtml(l.email)}" style="color:var(--accent)">${escHtml(l.email)}</a>` : `<span style="color:var(--text3);font-size:12px">—</span>`}${editBtn('email', l.email)}</div>`,
   ].filter(Boolean).join('');
   return `
@@ -787,6 +793,7 @@ function renderPanelKeyInfo(l) {
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:3px">Letzte Notiz</div>
       <div style="font-size:12px;color:var(--text2);line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${escHtml(lastNote.text)}</div>
     </div>` : ''}
+    <div id="callLogSection">${renderCallLogs(l.call_logs||[])}</div>
   `;
 }
 
@@ -1939,43 +1946,41 @@ document.getElementById('editContactInput')?.addEventListener('keydown', functio
   </div>
 </div>
 
-<!-- PHONE VERIFY MODAL -->
-<div class="modal-overlay" id="phoneVerifyModal" onclick="if(event.target===this)closePhoneVerifyModal()">
+<!-- CALL DOKUMENTATION MODAL -->
+<div class="modal-overlay" id="callDocModal" onclick="if(event.target===this)closeCallDocModal()">
   <div style="background:var(--bg2);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.25);width:420px;max-width:96vw;display:flex;flex-direction:column">
     <div style="padding:22px 28px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)">
       <div style="display:flex;align-items:center;gap:10px">
-        <div style="width:36px;height:36px;border-radius:10px;background:rgba(27,115,205,0.12);display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:16px"><i class="fas fa-shield-alt"></i></div>
-        <div style="font-size:16px;font-weight:700;color:var(--text)">Telefonnummer verifizieren</div>
+        <div style="width:36px;height:36px;border-radius:10px;background:rgba(34,197,94,0.12);display:flex;align-items:center;justify-content:center;color:var(--green);font-size:16px"><i class="fas fa-phone"></i></div>
+        <div style="font-size:16px;font-weight:700;color:var(--text)">Anruf dokumentieren</div>
       </div>
-      <button onclick="closePhoneVerifyModal()" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;width:32px;height:32px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px"><i class="fas fa-times"></i></button>
+      <button onclick="closeCallDocModal()" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;width:32px;height:32px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px"><i class="fas fa-times"></i></button>
     </div>
     <div style="padding:20px 28px 24px;display:flex;flex-direction:column;gap:14px">
-      <!-- Schritt 1: SMS anfordern -->
-      <div id="pvStep1">
-        <p style="font-size:13px;color:var(--text2);margin:0 0 10px">SMS mit 6-stelligem Code wird gesendet an:</p>
-        <div id="pvPhone" style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:var(--text);background:var(--bg3);border-radius:8px;padding:10px 14px;margin-bottom:14px"></div>
-        <div style="display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border);padding-top:12px">
-          <button class="btn btn-ghost btn-sm" onclick="closePhoneVerifyModal()">Abbrechen</button>
-          <button class="btn btn-primary btn-sm" id="pvSendBtn" onclick="pvSendSms()"><i class="fas fa-paper-plane"></i> SMS senden</button>
-        </div>
+      <div class="form-group" style="margin:0">
+        <label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:6px">Ergebnis</label>
+        <select id="callDocStatus" class="form-control">
+          <option value="completed">Gespräch geführt</option>
+          <option value="no-answer">Nicht abgenommen</option>
+          <option value="busy">Besetzt</option>
+          <option value="failed">Fehlgeschlagen</option>
+        </select>
       </div>
-      <!-- Schritt 2: Code eingeben -->
-      <div id="pvStep2" style="display:none">
-        <p style="font-size:13px;color:var(--text2);margin:0 0 10px">6-stelligen Code aus der SMS eingeben:</p>
-        <input type="text" id="pvCode" inputmode="numeric" maxlength="6" placeholder="000000"
-          style="width:100%;text-align:center;letter-spacing:10px;font-size:26px;font-family:'JetBrains Mono',monospace;padding:12px;border:1px solid var(--border2);border-radius:8px;background:var(--bg3);color:var(--text);outline:none;box-sizing:border-box">
-        <p style="font-size:11px;color:var(--text3);margin:8px 0 0">Code ist 10 Minuten gültig. <button onclick="pvSendSms()" style="background:none;border:none;cursor:pointer;color:var(--accent);font-size:11px;padding:0">Neuer Code?</button></p>
-        <div style="display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border);padding-top:12px;margin-top:12px">
-          <button class="btn btn-ghost btn-sm" onclick="closePhoneVerifyModal()">Abbrechen</button>
-          <button class="btn btn-primary btn-sm" id="pvConfirmBtn" onclick="pvConfirm()"><i class="fas fa-check"></i> Bestätigen</button>
-        </div>
+      <div class="form-group" style="margin:0">
+        <label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:6px">Dauer <span style="font-weight:400;color:var(--text3)">(Minuten, optional)</span></label>
+        <input type="number" id="callDocDuration" class="form-control" min="0" max="999" placeholder="z. B. 5">
       </div>
-      <div id="pvError" style="color:var(--red);font-size:12px;min-height:16px;margin-top:-8px"></div>
+      <div class="form-group" style="margin:0">
+        <label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:6px">Notiz <span style="font-weight:400;color:var(--text3)">(optional)</span></label>
+        <textarea id="callDocNote" class="form-control" rows="3" placeholder="Was wurde besprochen?" style="resize:vertical;font-size:13px"></textarea>
+      </div>
+      <div id="callDocError" style="color:var(--red);font-size:12px;min-height:14px;margin-top:-6px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border);padding-top:12px">
+        <button class="btn btn-ghost btn-sm" onclick="closeCallDocModal()">Überspringen</button>
+        <button class="btn btn-primary btn-sm" id="callDocSaveBtn" onclick="saveCallDoc()"><i class="fas fa-check"></i> Speichern</button>
+      </div>
     </div>
   </div>
 </div>
-<script>
-document.getElementById('pvCode')?.addEventListener('keydown', e => { if(e.key==='Enter') pvConfirm(); });
-</script>
 </body>
 </html>
