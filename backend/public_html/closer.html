@@ -1388,7 +1388,8 @@ async function saveInviteCl() {
 }
 
 // ── Init ──────────────────────────────────────────────────────
-['myLeadsBody','allLeadsBody'].forEach(id => { const b = document.getElementById(id); if (b) b.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)"><i class="fas fa-spinner fa-spin"></i></td></tr>'; });
+['myLeadsBody','allLeadsBody'].forEach(id => { const b = document.getElementById(id); if (b) b.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)"><i class="fas fa-spinner fa-spin"></i></td></tr>'; });
+showSection('myLeads');
 loadLeads();
 setInterval(loadReminders, 5 * 60 * 1000);
 checkReminderNotifications();
