@@ -31,7 +31,7 @@ router.post('/', auth, async (req, res) => {
   const apiKey = process.env.CLAUDE_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'Claude API Key nicht konfiguriert (.env)' });
 
-  const maxL = Math.min(parseInt(max_leads) || 10, 50);
+  const maxL = Math.min(parseInt(max_leads) || 10, 100);
   const srcList = Array.isArray(sources) ? sources.join(', ') : 'web';
 
   const userPrompt = `Recherchiere bis zu ${maxL} ECHTE Unternehmen:
