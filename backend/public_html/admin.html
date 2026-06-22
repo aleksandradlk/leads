@@ -39,6 +39,17 @@
 .view-toggle{display:flex;border:1px solid var(--border2);border-radius:8px;overflow:hidden}
 .view-toggle button{background:var(--bg3);border:none;color:var(--text3);padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px}
 .view-toggle button.active{background:var(--accent);color:#fff}
+/* Pipeline */
+.pipeline-board{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px}
+.pipeline-col{flex:0 0 230px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);display:flex;flex-direction:column;max-height:calc(100vh - 280px);min-height:200px}
+.pipeline-col-header{padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;color:var(--text2)}
+.pipeline-col-body{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:8px;min-height:80px;transition:background .15s}
+.pipeline-col-body.drag-over{background:rgba(79,142,247,0.1)}
+.pipeline-card{background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;cursor:grab;font-size:12px}
+.pipeline-card:active{cursor:grabbing}
+.pipeline-card.dragging{opacity:.35}
+.pipeline-card .pc-company{font-weight:700;font-size:13px;margin-bottom:4px}
+.pipeline-card .pc-row{display:flex;align-items:center;gap:6px;color:var(--text3);font-size:11px;margin-top:3px}
 </style>
 </head>
 <body>
@@ -98,6 +109,10 @@
           </select>
           <button class="btn btn-primary btn-sm" onclick="openAddLeadModal()"><i class="fas fa-plus"></i> Lead hinzufügen</button>
           <button class="btn btn-ghost btn-sm" onclick="exportCSV()"><i class="fas fa-download"></i> CSV</button>
+          <div class="view-toggle">
+            <button id="allLeadsViewTable" class="active" onclick="setLeadsView('table')"><i class="fas fa-table"></i> Tabelle</button>
+            <button id="allLeadsViewPipeline" onclick="setLeadsView('pipeline')"><i class="fas fa-columns"></i> Pipeline</button>
+          </div>
           <button class="btn btn-ghost btn-sm" onclick="loadLeads()"><i class="fas fa-sync"></i></button>
         </div>
       </div>
@@ -121,7 +136,7 @@
 
       <div id="funnelSummary" style="margin-bottom:16px"></div>
 
-      <div class="card">
+      <div id="allLeadsTableCard" class="card">
         <div class="card-header">
           <div class="card-title"><i class="fas fa-database" style="color:var(--accent)"></i> Lead-Datenbank <span class="badge" id="leadCount">0</span></div>
         </div>
@@ -135,6 +150,10 @@
             <tbody id="leadsTableBody"></tbody>
           </table>
         </div>
+      </div>
+
+      <div id="allLeadsPipelineView" style="display:none">
+        <div class="pipeline-board" id="allLeadsPipelineBoard"></div>
       </div>
     </div>
 
@@ -169,8 +188,7 @@
       </div>
 
       <div id="myLeadsPipelineView" style="display:none">
-        <div id="myLeadsFunnel"></div>
-        <div id="myLeadsPipelineCols" style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-top:16px"></div>
+        <div class="pipeline-board" id="myLeadsPipelineBoard"></div>
       </div>
     </div>
 
@@ -530,6 +548,89 @@ function showTab(name) {
   if (name === 'feedback') loadFeedback();
 }
 
+// ── PIPELINE (geteilt für Alle Leads + Meine Leads) ──────────
+const PIPELINE_STATUSES = [
+  ['neu','Neu'],['kontaktiert','Kontaktiert'],['nicht_erreicht','Nicht erreicht'],
+  ['kein_interesse','Kein Interesse'],['rueckruf','Rückruf'],['kunde','Kunde']
+];
+const _pipelineData = {};
+let _adminDraggedId = null;
+
+function renderAdminPipeline(leads, boardId) {
+  _pipelineData[boardId] = leads;
+  const board = document.getElementById(boardId);
+  if (!board) return;
+  board.innerHTML = PIPELINE_STATUSES.map(([status, label]) => {
+    const colLeads = leads.filter(l => l.status === status);
+    const cards = colLeads.map(l => `
+      <div class="pipeline-card" draggable="true" data-id="${l.id}"
+           ondragstart="onAdminCardDragStart(event,${l.id})" ondragend="onAdminCardDragEnd(event)"
+           onclick="openLeadPanel(${l.id})">
+        <div class="pc-company">${escHtml(l.company||'—')} ${ageBadge(l.updated_at||l.created_at)}</div>
+        ${l.ceo    ? `<div class="pc-row"><i class="fas fa-user" style="width:12px"></i>${escHtml(l.ceo)}</div>` : ''}
+        ${l.phone  ? `<div class="pc-row"><i class="fas fa-phone" style="width:12px"></i><a href="tel:${escHtml(l.phone)}" onclick="event.stopPropagation()" style="color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:11px">${escHtml(l.phone)}</a></div>` : ''}
+        ${l.assigned_name ? `<div class="pc-row"><i class="fas fa-user-tag" style="width:12px"></i>${escHtml(l.assigned_name)}</div>` : ''}
+        <div class="pc-row"><i class="fas fa-clock" style="width:12px"></i>${fmtDateShort(l.updated_at||l.created_at)}</div>
+      </div>`).join('');
+    return `
+      <div class="pipeline-col">
+        <div class="pipeline-col-header">
+          <span><span class="status-badge s-${status}" style="padding:2px 7px">${label}</span></span>
+          <span class="badge">${colLeads.length}</span>
+        </div>
+        <div class="pipeline-col-body" data-status="${status}"
+             ondragover="onAdminColDragOver(event)" ondragleave="onAdminColDragLeave(event)"
+             ondrop="onAdminColDrop(event,'${status}','${boardId}')">
+          ${cards || '<div style="color:var(--text3);font-size:11px;text-align:center;padding:16px 4px">Keine Leads</div>'}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function onAdminCardDragStart(e, id) {
+  _adminDraggedId = id;
+  e.target.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+function onAdminCardDragEnd(e) { e.target.classList.remove('dragging'); }
+function onAdminColDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
+function onAdminColDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+
+async function onAdminColDrop(e, status, boardId) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  const id = _adminDraggedId; _adminDraggedId = null;
+  if (!id) return;
+  const lead = allLeads.find(l => l.id === id);
+  if (!lead || lead.status === status) return;
+  lead.status = status;
+  renderAdminPipeline(_pipelineData[boardId] || [], boardId);
+  try {
+    await api('PATCH', `/leads/${id}/status`, { status });
+    updateLeadStats(allLeads);
+    renderLeads(currentFilteredLeads.length ? currentFilteredLeads : allLeads);
+    showToast('Status aktualisiert ✓');
+  } catch(e) {
+    showToast(e.message, 'err');
+    loadLeads();
+  }
+}
+
+// ── ALLE LEADS — View-Toggle ──────────────────────────────────
+let adminLeadsViewMode = 'table';
+
+function setLeadsView(mode) {
+  adminLeadsViewMode = mode;
+  document.getElementById('allLeadsViewTable').classList.toggle('active', mode === 'table');
+  document.getElementById('allLeadsViewPipeline').classList.toggle('active', mode === 'pipeline');
+  document.getElementById('allLeadsTableCard').style.display      = mode === 'table'    ? '' : 'none';
+  document.getElementById('allLeadsPipelineView').style.display   = mode === 'pipeline' ? '' : 'none';
+  if (mode === 'pipeline') {
+    const leads = currentFilteredLeads.length ? currentFilteredLeads : allLeads;
+    renderAdminPipeline(leads, 'allLeadsPipelineBoard');
+  }
+}
+
 // ── MEINE LEADS ───────────────────────────────────────────────
 let myLeadsView = 'table';
 
@@ -551,7 +652,7 @@ function renderMyLeads() {
   document.getElementById('myLeadCount').textContent = mine.length;
 
   if (myLeadsView === 'pipeline') {
-    renderMyLeadsPipeline(mine);
+    renderAdminPipeline(mine, 'myLeadsPipelineBoard');
     return;
   }
 
@@ -571,59 +672,6 @@ function renderMyLeads() {
       <td style="font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace">${fmtDateShort(l.created_at)}</td>
       <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openLeadPanel(${l.id})"><i class="fas fa-chevron-right"></i></button></td>
     </tr>`).join('');
-}
-
-function renderMyLeadsPipeline(mine) {
-  const STEPS = [
-    { key: 'neu',            label: 'Neu',            color: 'var(--accent)' },
-    { key: 'kontaktiert',    label: 'Kontaktiert',    color: 'var(--accent2)' },
-    { key: 'rueckruf',       label: 'Rückruf',        color: 'var(--amber)' },
-    { key: 'nicht_erreicht', label: 'Nicht erreicht', color: 'var(--text3)' },
-    { key: 'kein_interesse', label: 'Kein Interesse', color: 'var(--red)' },
-    { key: 'kunde',          label: 'Kunde',          color: 'var(--green)' },
-  ];
-  const total = mine.length;
-  const counts = {};
-  mine.forEach(l => { counts[l.status] = (counts[l.status]||0) + 1; });
-
-  // Funnel-Balken
-  const funnelRows = STEPS.map(({ key, label, color }) => {
-    const n = counts[key] || 0;
-    const pct = total > 0 ? Math.round(n / total * 100) : 0;
-    return `<div style="display:grid;grid-template-columns:140px 36px 1fr 44px;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid var(--border)">
-      <span style="font-size:13px;color:var(--text2)">${label}</span>
-      <span style="font-size:14px;font-weight:700;text-align:right">${n}</span>
-      <div style="background:var(--bg2);border-radius:4px;height:8px;overflow:hidden">
-        <div style="width:${pct}%;height:100%;background:${color};border-radius:4px;transition:width .3s"></div>
-      </div>
-      <span style="font-size:12px;color:var(--text3);text-align:right">${pct}%</span>
-    </div>`;
-  }).join('');
-  document.getElementById('myLeadsFunnel').innerHTML = `
-    <div class="card" style="padding:14px 18px;margin-bottom:16px">
-      <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:10px;display:flex;align-items:center;gap:6px">
-        <i class="fas fa-filter" style="color:var(--accent)"></i> Mein Funnel — ${total} Leads
-      </div>${funnelRows}
-    </div>`;
-
-  // Spalten-Kanban
-  document.getElementById('myLeadsPipelineCols').innerHTML = STEPS.map(({ key, label, color }) => {
-    const cards = mine.filter(l => l.status === key);
-    const cardHtml = cards.length
-      ? cards.map(l => `
-        <div class="card" style="padding:10px 12px;margin-bottom:8px;cursor:pointer;border-left:3px solid ${color}" onclick="openLeadPanel(${l.id})">
-          <div style="font-weight:600;font-size:13px;margin-bottom:3px">${escHtml(l.company||'—')}</div>
-          ${l.phone ? `<div style="font-size:11px;color:var(--accent)">${escHtml(l.phone)}</div>` : ''}
-          ${l.location ? `<div style="font-size:11px;color:var(--text3)">${escHtml(l.location)}</div>` : ''}
-        </div>`).join('')
-      : `<div style="color:var(--text3);font-size:12px;text-align:center;padding:16px 0">Keine</div>`;
-    return `<div>
-      <div style="font-size:12px;font-weight:700;color:${color};margin-bottom:8px;display:flex;align-items:center;gap:6px">
-        <span>${label}</span><span class="badge">${cards.length}</span>
-      </div>
-      ${cardHtml}
-    </div>`;
-  }).join('');
 }
 
 // ── STATUS QUICK-CHANGE (Tabellenzeile) ────────────────────────
@@ -657,8 +705,10 @@ async function quickChangeStatus(id, sel) {
 async function loadLeads() {
   try {
     allLeads = await api('GET', '/leads');
+    currentFilteredLeads = allLeads;
     renderLeads(allLeads);
     updateLeadStats(allLeads);
+    if (adminLeadsViewMode === 'pipeline') renderAdminPipeline(allLeads, 'allLeadsPipelineBoard');
   } catch (e) {
     const body = document.getElementById('leadsTableBody');
     if (body) body.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--red)">
@@ -687,6 +737,7 @@ function filterLeads() {
   if (closer)  filtered = filtered.filter(l => String(l.assigned_to) === closer);
   currentFilteredLeads = filtered;
   renderLeads(filtered);
+  if (adminLeadsViewMode === 'pipeline') renderAdminPipeline(filtered, 'allLeadsPipelineBoard');
 }
 
 function renderLeads(leads) {
