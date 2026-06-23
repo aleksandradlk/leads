@@ -275,8 +275,8 @@
             <input type="email" id="cu-email" class="form-control" placeholder="optional" autocomplete="off">
           </div>
           <div class="form-group">
-            <label>Telefon</label>
-            <input type="text" id="cu-phone" class="form-control" placeholder="optional" autocomplete="off">
+            <label>Telefon <span style="color:var(--red)">*</span></label>
+            <input type="text" id="cu-phone" class="form-control" placeholder="+49 152 123456" autocomplete="off">
           </div>
           <div class="form-group">
             <label>Passwort <span style="color:var(--red)">*</span></label>
@@ -1929,6 +1929,7 @@ async function submitCreateUser() {
 
   if (!name)     { if (errEl) errEl.textContent = 'Name ist erforderlich'; return; }
   if (!username) { if (errEl) errEl.textContent = 'Benutzername ist erforderlich'; return; }
+  if (!phone)    { if (errEl) errEl.textContent = 'Telefonnummer ist erforderlich'; return; }
   if (!password || password.length < 6) { if (errEl) errEl.textContent = 'Passwort muss mindestens 6 Zeichen haben'; return; }
 
   try {
