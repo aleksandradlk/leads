@@ -538,10 +538,7 @@
           <input type="checkbox" id="u-can-reassign-leads" style="width:15px;height:15px;accent-color:var(--accent)">
           <span>Leads neu zuweisen</span>
         </label>
-        <label style="display:flex;align-items:center;gap:8px;font-weight:400;font-size:13px;opacity:0.55" title="Alle Closer sehen immer alle Leads — nicht einschränkbar">
-          <input type="checkbox" id="u-can-view-all-leads" style="width:15px;height:15px;accent-color:var(--accent)" checked disabled>
-          <span>Alle Leads sehen <span style="font-size:10px;color:var(--text3)">(immer aktiv)</span></span>
-        </label>
+        <input type="hidden" id="u-can-view-all-leads" value="1">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;font-size:13px">
           <input type="checkbox" id="u-can-create-users" style="width:15px;height:15px;accent-color:var(--accent)">
           <span>Neue Benutzer anlegen</span>
@@ -1446,7 +1443,9 @@ async function saveUser() {
     password:  document.getElementById('u-password').value || undefined,
   };
   PERM_KEYS.forEach((key, i) => {
-    body[key] = (role === 'closer' && document.getElementById(PERM_IDS[i]).checked) ? 1 : 0;
+    const el = document.getElementById(PERM_IDS[i]);
+    const val = el.type === 'hidden' ? 1 : (el.checked ? 1 : 0);
+    body[key] = (role === 'closer') ? val : 0;
   });
   try {
     if (editingUserId) { await api('PATCH', `/users/${editingUserId}`, body); }

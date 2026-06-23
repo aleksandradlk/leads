@@ -1772,9 +1772,7 @@ async function saveInviteCl() {
   } catch {}
 })();
 
-if (ME && !ME.onboarding_shown) {
-  document.getElementById('onboardingModal').classList.add('open');
-}
+// Onboarding-Trigger läuft nach dem DOM-Ende (siehe <script> nach dem Modal-HTML)
 
 async function closeOnboarding() {
   document.getElementById('onboardingModal').classList.remove('open');
@@ -2133,5 +2131,10 @@ document.getElementById('editContactInputCl')?.addEventListener('keydown', funct
   </div>
 </div>
 
+<script>
+if (ME && !ME.onboarding_shown) {
+  document.getElementById('onboardingModal').classList.add('open');
+}
+</script>
 </body>
 </html>
