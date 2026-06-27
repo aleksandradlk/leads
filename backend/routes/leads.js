@@ -537,19 +537,19 @@ router.post('/:id/email', auth, async (req, res) => {
       return res.status(403).json({ error: 'E-Mail nur bei eigenen oder unzugewiesenen Leads erlaubt' });
 
     const [[user]] = await db.query('SELECT full_name FROM users WHERE id=?', [req.user.id]);
-    await sendLeadEmail({ to, subject, body, fromName: user?.full_name || 'NovaFlow' });
+    const realMessageId = await sendLeadEmail({ to, subject, body, leadId: id });
 
     await db.query(
       'INSERT INTO comments (lead_id, user_id, text) VALUES (?,?,?)',
       [id, req.user.id, `📧 E-Mail gesendet: ${subject}`]
     );
-    // Gesendete E-Mail auch in lead_emails loggen
+    // Gesendete E-Mail mit echter Message-ID speichern — wird für Antwort-Zuordnung benötigt
     await db.query(
       `INSERT IGNORE INTO lead_emails (lead_id, direction, from_address, to_address, subject, body_text, message_id, received_at)
        VALUES (?, 'outbound', ?, ?, ?, ?, ?, NOW())`,
       [id, process.env.SMTP_USER || 'info@novaflowservices.de', to, subject,
        body.replace(/<[^>]+>/g, '').trim().slice(0, 10000),
-       `out-${Date.now()}-${id}`]
+       realMessageId]
     ).catch(() => {});
     await log(req.user.id, 'lead_email_sent', 'lead', id, { to, subject }, req.ip);
     res.json({ ok: true });

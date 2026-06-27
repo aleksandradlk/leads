@@ -44,11 +44,19 @@ async function sendReminder({ to, toName, leadCompany, note, remindAt }) {
   });
 }
 
-async function sendLeadEmail({ to, subject, body }) {
-  await transporter.sendMail({
-    from: `"NovaFlow Services" <${process.env.SMTP_USER}>`,
+// Sendet eine Lead-E-Mail und gibt die echte Message-ID zurück.
+// Betrifft subject wird "[NF-{leadId}]" angehängt damit Antworten sicher zugeordnet werden können.
+async function sendLeadEmail({ to, subject, body, leadId }) {
+  const domain = (process.env.SMTP_USER || 'info@novaflowservices.de').split('@')[1] || 'novaflowservices.de';
+  const msgId  = `<crm-lead-${leadId}-${Date.now()}@${domain}>`;
+  const taggedSubject = subject.includes('[NF-') ? subject : `${subject} [NF-${leadId}]`;
+
+  const info = await transporter.sendMail({
+    from:    `"NovaFlow Services" <${process.env.SMTP_USER}>`,
     to,
-    subject,
+    subject: taggedSubject,
+    messageId: msgId,
+    headers: { 'X-CRM-Lead-ID': String(leadId) },
     html: `
       <div style="font-family:Arial,sans-serif;max-width:580px;margin:0 auto;color:#141f34">
         ${body.includes('<') ? body : body.split('\n').map(l => l.trim() ? `<p style="margin:0 0 12px">${l}</p>` : '<br>').join('')}
@@ -59,6 +67,8 @@ async function sendLeadEmail({ to, subject, body }) {
     `,
     attachments: [LOGO_ATTACHMENT],
   });
+  // Nodemailer gibt die tatsächlich verwendete Message-ID zurück
+  return info.messageId || msgId;
 }
 
 module.exports = { sendReminder, sendLeadEmail };
