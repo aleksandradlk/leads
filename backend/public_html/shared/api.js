@@ -188,6 +188,36 @@ function startActivityTracking() {
       _clickCount = 0;
     } catch {}
   }, 30_000);
+
+  startSessionExpiryWarning();
+}
+
+// ── Session expiry warning ────────────────────────────────────
+function startSessionExpiryWarning() {
+  const token = Auth.getToken();
+  if (!token) return;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+    if (!payload.exp) return;
+    const expiresAt = payload.exp * 1000;
+    const delay = expiresAt - 10 * 60 * 1000 - Date.now();
+    if (delay > 0) setTimeout(() => _showSessionWarningBanner(expiresAt), delay);
+  } catch {}
+}
+
+function _showSessionWarningBanner(expiresAt) {
+  if (document.getElementById('_sessionWarningBanner')) return;
+  const remaining = Math.max(1, Math.round((expiresAt - Date.now()) / 60000));
+  const banner = document.createElement('div');
+  banner.id = '_sessionWarningBanner';
+  banner.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:99999;background:#d97706;color:#fff;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.25);padding:14px 20px;display:flex;align-items:center;gap:14px;font-size:14px;font-weight:500;max-width:90vw;white-space:nowrap';
+  banner.innerHTML = `
+    <i class="fas fa-clock" style="font-size:18px;flex-shrink:0"></i>
+    <span>Deine Session läuft in <strong>${remaining} Minuten</strong> ab.</span>
+    <button onclick="logout()" style="background:#fff;color:#92400e;border:none;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">Jetzt neu anmelden</button>
+    <button onclick="document.getElementById('_sessionWarningBanner').remove()" style="background:rgba(255,255,255,0.2);color:#fff;border:none;border-radius:8px;width:28px;height:28px;font-size:16px;cursor:pointer;flex-shrink:0">&times;</button>
+  `;
+  document.body.appendChild(banner);
 }
 
 // ── Sidebar helper ────────────────────────────────────────────

@@ -1817,7 +1817,16 @@ async function wikiFileOpen(filename, encodedName, forceDownload) {
       showWikiNoPreviewModal(filename, encodedName ? decodeURIComponent(encodedName) : filename);
       return;
     }
-    window.open(`/api/wiki/files/${encodeURIComponent(filename)}?token=${encodeURIComponent(Auth.getToken())}`, '_blank');
+    try {
+      const _wr = await fetch(`/api/wiki/files/${encodeURIComponent(filename)}`, {
+        headers: { 'Authorization': 'Bearer ' + Auth.getToken() }
+      });
+      if (!_wr.ok) { showToast('Datei nicht verfügbar', 'err'); return; }
+      const _wb = await _wr.blob();
+      const _wu = URL.createObjectURL(_wb);
+      window.open(_wu, '_blank');
+      setTimeout(() => URL.revokeObjectURL(_wu), 30000);
+    } catch { showToast('Datei konnte nicht geöffnet werden', 'err'); }
     return;
   }
   // Download: Blob-Weg damit der Dateiname korrekt gesetzt wird
