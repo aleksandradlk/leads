@@ -7,8 +7,9 @@ const { sendLeadEmail } = require('../helpers/mailer');
 const VALID_STATUSES = ['neu','kontaktiert','nicht_erreicht','kein_interesse','rueckruf','kunde'];
 
 function canView(user, lead) {
-  // Alle authentifizierten Benutzer dürfen alle Leads sehen
-  return true;
+  if (user.role === 'admin') return true;
+  if (user.can_view_all_leads) return true;
+  return lead.assigned_to === user.id || lead.assigned_to === null;
 }
 
 // ── GET /api/leads ──────────────────────────────────────────

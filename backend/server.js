@@ -278,7 +278,7 @@ db.query('ALTER TABLE leads ADD FULLTEXT INDEX ft_leads_search (company, ceo, lo
 cron.schedule('0 3 * * *', async () => {
   try {
     const [r] = await db.query(
-      'DELETE FROM activity_log WHERE created_at < DATE_SUB(NOW(), INTERVAL 7 DAY)'
+      'DELETE FROM activity_log WHERE created_at < DATE_SUB(NOW(), INTERVAL 90 DAY)'
     );
     console.log(`Activity cleanup: ${r.affectedRows} Einträge gelöscht`);
   } catch(e) { console.error('Activity cleanup error:', e.message); }
