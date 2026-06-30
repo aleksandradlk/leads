@@ -14,7 +14,11 @@ async function getMaintenanceStatus() {
     const s = {};
     rows.forEach(r => { s[r.key_name] = r.value; });
     _maintCache = { active: s.maintenance_mode === 'true', until: s.maintenance_until || '', fetchedAt: now };
-  } catch (_) {}
+  } catch (_) {
+    // Bei DB-Fehler: fetchedAt auf now setzen damit kein Request-Stampede entsteht,
+    // alten Cache-Wert (inkl. active-Flag) beibehalten
+    _maintCache = { ..._maintCache, fetchedAt: now };
+  }
   return _maintCache;
 }
 
@@ -37,6 +41,12 @@ async function auth(req, res, next) {
     if (!user || !user.is_active) return res.status(401).json({ error: 'Account gesperrt oder nicht gefunden' });
     req.user = user;
 
+    // Session-Timestamp aktualisieren (auch während Wartung, damit Closer nicht ausgeloggt werden)
+    await db.query(
+      'UPDATE sessions SET last_active = NOW() WHERE user_id = ?',
+      [user.id]
+    );
+
     // Wartungsmodus: Closer werden blockiert, Admin kommt immer durch
     if (user.role !== 'admin') {
       const maint = await getMaintenanceStatus();
@@ -51,11 +61,6 @@ async function auth(req, res, next) {
       }
     }
 
-    // Update last_active in sessions
-    await db.query(
-      'UPDATE sessions SET last_active = NOW() WHERE user_id = ?',
-      [user.id]
-    );
     next();
   } catch {
     return res.status(401).json({ error: 'Token ungültig oder abgelaufen' });
@@ -68,4 +73,4 @@ function adminOnly(req, res, next) {
   next();
 }
 
-module.exports = { auth, adminOnly, invalidateMaintenanceCache };
+module.exports = { auth, adminOnly, invalidateMaintenanceCache, getMaintenanceStatus };

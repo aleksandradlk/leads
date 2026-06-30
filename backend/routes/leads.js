@@ -282,8 +282,10 @@ router.get('/unmatched-emails', auth, adminOnly, async (req, res) => {
 
 // ── DELETE /api/leads/unmatched-emails/:id — Unzugeordnete Email löschen (Admin) ──
 router.delete('/unmatched-emails/:id', auth, adminOnly, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'Ungültige ID' });
   try {
-    await db.query('DELETE FROM unmatched_emails WHERE id=?', [parseInt(req.params.id)]);
+    await db.query('DELETE FROM unmatched_emails WHERE id=?', [id]);
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: 'Fehler beim Löschen' }); }
 });
