@@ -1,4 +1,7 @@
 const nodemailer = require('nodemailer');
+
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function stripHeaders(s) { return String(s||'').replace(/[\r\n]/g,' '); }
 const path = require('path');
 require('dotenv').config();
 
@@ -26,16 +29,16 @@ async function sendReminder({ to, toName, leadCompany, note, remindAt }) {
   await transporter.sendMail({
     from: `"NovaFlow Services" <${process.env.SMTP_USER}>`,
     to,
-    subject: `⏰ Reminder: ${leadCompany}`,
+    subject: stripHeaders(`⏰ Reminder: ${leadCompany}`),
     html: `
       <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:24px;background:#f9f9f9;border-radius:8px">
         <img src="cid:${LOGO_CID}" alt="NovaFlow Services" width="160" style="display:block;margin-bottom:20px">
         <h2 style="color:#4f8ef7;margin-bottom:8px">Erinnerung</h2>
-        <p style="color:#333;margin-bottom:16px">Hallo ${toName},</p>
+        <p style="color:#333;margin-bottom:16px">Hallo ${esc(toName)},</p>
         <div style="background:#fff;border-left:4px solid #4f8ef7;padding:16px;border-radius:4px;margin-bottom:16px">
-          <strong>Lead:</strong> ${leadCompany}<br>
+          <strong>Lead:</strong> ${esc(leadCompany)}<br>
           <strong>Fällig:</strong> ${dateStr}<br>
-          ${note ? `<strong>Notiz:</strong> ${note}` : ''}
+          ${note ? `<strong>Notiz:</strong> ${esc(note)}` : ''}
         </div>
         <p style="color:#888;font-size:12px">NovaFlow Services · info@novaflowservices.de</p>
       </div>

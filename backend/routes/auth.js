@@ -87,10 +87,10 @@ router.post('/heartbeat', async (req, res) => {
   try {
     const token = header.startsWith('Bearer ') ? header.slice(7) : header;
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    const { clicks } = req.body;
+    const clicks = Math.max(0, Math.min(parseInt(req.body.clicks) || 0, 10000));
     await db.query(
       'UPDATE sessions SET last_active = NOW(), click_count = click_count + ? WHERE user_id = ?',
-      [clicks || 0, payload.id]
+      [clicks, payload.id]
     );
     res.json({ ok: true });
   } catch {
@@ -119,6 +119,7 @@ router.patch('/password', async (req, res) => {
 
     const hash = await bcrypt.hash(new_password, 12);
     await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, payload.id]);
+    await db.query('DELETE FROM sessions WHERE user_id=? AND token!=?', [payload.id, token]);
     await log(payload.id, 'password_change', 'user', payload.id, null, req.ip);
     res.json({ ok: true });
   } catch {

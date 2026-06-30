@@ -39,8 +39,8 @@ router.get('/assignable', auth, async (req, res) => {
     const [rows] = await db.query(q);
     res.json(rows);
   } catch(e) {
-    const [rows] = await db.query('SELECT id, full_name, role FROM users WHERE is_active=1 ORDER BY full_name');
-    res.json(rows);
+    console.error('Assignable error:', e);
+    res.status(500).json({ error: 'Ein Fehler ist aufgetreten.' });
   }
 });
 
@@ -159,7 +159,11 @@ router.patch('/:id', auth, adminOnly, async (req, res) => {
   if (full_name) await db.query('UPDATE users SET full_name=? WHERE id=?', [full_name, id]);
   if (email !== undefined) await db.query('UPDATE users SET email=? WHERE id=?', [email || null, id]);
   if (req.body.phone !== undefined) await db.query('UPDATE users SET phone=? WHERE id=?', [req.body.phone || null, id]);
-  if (role)      await db.query('UPDATE users SET role=? WHERE id=?', [role, id]);
+  if (role) {
+    if (!['admin', 'closer'].includes(role))
+      return res.status(400).json({ error: 'Ungültige Rolle' });
+    await db.query('UPDATE users SET role=? WHERE id=?', [role, id]);
+  }
   if (is_active !== undefined)
     await db.query('UPDATE users SET is_active=? WHERE id=?', [is_active ? 1 : 0, id]);
   if (password) {
@@ -172,7 +176,9 @@ router.patch('/:id', auth, adminOnly, async (req, res) => {
       await db.query(`UPDATE users SET ${f}=? WHERE id=?`, [req.body[f] ? 1 : 0, id]);
   }
 
-  await log(req.user.id, 'user_update', 'user', id, req.body, req.ip);
+  const logBody = { ...req.body };
+  delete logBody.password;
+  await log(req.user.id, 'user_update', 'user', id, logBody, req.ip);
   res.json({ ok: true });
 });
 
@@ -181,13 +187,12 @@ router.patch('/:id/notify', auth, async (req, res) => {
   const id = parseInt(req.params.id);
   if (req.user.id !== id && req.user.role !== 'admin')
     return res.status(403).json({ error: 'Nicht berechtigt' });
-  const { notify_email, notify_sms, phone, email } = req.body;
+  const { notify_email, notify_sms, phone } = req.body;
   const updates = [];
   const params  = [];
   if (notify_email !== undefined) { updates.push('notify_email=?'); params.push(notify_email ? 1 : 0); }
   if (notify_sms   !== undefined) { updates.push('notify_sms=?');   params.push(notify_sms   ? 1 : 0); }
   if (phone        !== undefined) { updates.push('phone=?');        params.push(phone || null); }
-  if (email        !== undefined) { updates.push('email=?');        params.push(email || null); }
   if (!updates.length) return res.status(400).json({ error: 'Nichts zu aktualisieren' });
   params.push(id);
   await db.query(`UPDATE users SET ${updates.join(',')} WHERE id=?`, params);

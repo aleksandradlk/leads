@@ -25,8 +25,11 @@ router.patch('/:id', auth, async (req, res) => {
       updates.push('ended_at=NOW()');
     }
     if (duration_seconds != null) {
+      const dur = parseInt(duration_seconds);
+      if (!Number.isFinite(dur) || dur < 0)
+        return res.status(400).json({ error: 'Ungültige Gesprächsdauer' });
       updates.push('duration_seconds=?');
-      params.push(parseInt(duration_seconds) || null);
+      params.push(dur);
     }
     if (note !== undefined) {
       const noteClean = note?.trim() || null;

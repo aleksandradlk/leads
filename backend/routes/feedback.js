@@ -26,10 +26,14 @@ router.get('/', auth, async (req, res) => {
   } catch(e) { console.error('Feedback error:', e); res.status(500).json({ error: 'Ein Fehler ist aufgetreten.' }); }
 });
 
+const VALID_TYPES = ['wunsch', 'bug', 'sonstiges'];
+
 // POST /api/feedback — neuen Eintrag erstellen (alle)
 router.post('/', auth, async (req, res) => {
   const { title, description, type } = req.body;
   if (!title?.trim()) return res.status(400).json({ error: 'Titel ist erforderlich' });
+  if (type && !VALID_TYPES.includes(type))
+    return res.status(400).json({ error: 'Ungültiger Typ' });
   try {
     const [r] = await db.query(
       `INSERT INTO feedback (user_id, title, description, type, tag)
@@ -70,6 +74,7 @@ router.delete('/:id', auth, async (req, res) => {
     if (req.user.role !== 'admin' && fb.user_id !== req.user.id)
       return res.status(403).json({ error: 'Kein Zugriff' });
     await db.query('DELETE FROM feedback WHERE id=?', [id]);
+    await log(req.user.id, 'feedback_delete', 'feedback', id, null, req.ip);
     res.json({ ok: true });
   } catch(e) { console.error('Feedback error:', e); res.status(500).json({ error: 'Ein Fehler ist aufgetreten.' }); }
 });

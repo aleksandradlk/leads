@@ -149,6 +149,8 @@ router.get('/files/:filename', async (req, res) => {
 
   const filename = path.basename(req.params.filename);
   const filepath = path.join(UPLOAD_DIR, filename);
+  if (!filepath.startsWith(path.resolve(UPLOAD_DIR) + path.sep))
+    return res.status(400).json({ error: 'Ungültiger Pfad' });
   if (!fs.existsSync(filepath)) return res.status(404).json({ error: 'Nicht gefunden' });
 
   const [[file]] = await db.query('SELECT mimetype, name FROM wiki_files WHERE filename=?', [filename]).catch(() => [[]]);
@@ -164,6 +166,8 @@ router.get('/files/:filename', async (req, res) => {
   const displayName = file?.name || filename;
   res.setHeader('Content-Type', mime);
   res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(displayName)}"`);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', "default-src 'none'");
   res.sendFile(filepath);
 });
 

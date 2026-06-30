@@ -1,4 +1,8 @@
 require('dotenv').config();
+if (!process.env.JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET ist nicht gesetzt.');
+  process.exit(1);
+}
 const express     = require('express');
 const cors        = require('cors');
 const helmet      = require('helmet');
@@ -42,7 +46,7 @@ app.use(helmet({
 }));
 app.use(compression());
 app.use(cors({
-  origin: process.env.BASE_URL || '*',
+  origin: process.env.BASE_URL || (process.env.NODE_ENV !== 'production' ? true : false),
   methods: ['GET','POST','PATCH','DELETE','PUT','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization'],
 }));
@@ -50,8 +54,10 @@ app.set('trust proxy', 1);
 app.use(express.json());
 
 // Rate limiting
-app.use('/api/auth/login', rateLimit({ windowMs: 15*60*1000, max: 20 }));
-app.use('/api/generate',   rateLimit({ windowMs: 60*1000, max: 5 }));
+app.use('/api/auth/login',    rateLimit({ windowMs: 15*60*1000, max: 20 }));
+app.use('/api/auth/setup',    rateLimit({ windowMs: 15*60*1000, max: 5 }));
+app.use('/api/auth/password', rateLimit({ windowMs: 15*60*1000, max: 10 }));
+app.use('/api/generate',      rateLimit({ windowMs: 60*1000, max: 5 }));
 
 // ── Static Frontend ───────────────────────────────────────────
 app.use(express.static(path.join(__dirname, 'public_html'), {

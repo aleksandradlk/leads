@@ -42,9 +42,18 @@ router.patch('/:id', auth, async (req, res) => {
   const { name, subject, body, category, is_active } = req.body;
   const updates = [];
   const params  = [];
-  if (name      !== undefined) { updates.push('name=?');      params.push(name.trim()); }
-  if (subject   !== undefined) { updates.push('subject=?');   params.push(subject.trim()); }
-  if (body      !== undefined) { updates.push('body=?');      params.push(body.trim()); }
+  if (name !== undefined) {
+    if (!name?.trim()) return res.status(400).json({ error: 'Name darf nicht leer sein' });
+    updates.push('name=?'); params.push(name.trim());
+  }
+  if (subject !== undefined) {
+    if (!subject?.trim()) return res.status(400).json({ error: 'Betreff darf nicht leer sein' });
+    updates.push('subject=?'); params.push(subject.trim());
+  }
+  if (body !== undefined) {
+    if (!body?.trim()) return res.status(400).json({ error: 'Text darf nicht leer sein' });
+    updates.push('body=?'); params.push(body.trim());
+  }
   if (category  !== undefined) { updates.push('category=?');  params.push(category?.trim() || null); }
   if (is_active !== undefined) { updates.push('is_active=?'); params.push(is_active ? 1 : 0); }
   if (!updates.length) return res.status(400).json({ error: 'Nichts zu aktualisieren' });

@@ -108,6 +108,7 @@ router.post('/:id/messages', auth, async (req, res) => {
   const chatId = parseInt(req.params.id);
   const { text } = req.body;
   if (!text?.trim()) return res.status(400).json({ error: 'Nachricht leer' });
+  if (text.trim().length > 10000) return res.status(400).json({ error: 'Nachricht zu lang (max. 10.000 Zeichen)' });
   try {
     const [[room]] = await db.query('SELECT * FROM chat_rooms WHERE id=?', [chatId]);
     if (!room) return res.status(404).json({ error: 'Chat nicht gefunden' });
@@ -146,6 +147,10 @@ router.post('/:id/invite', auth, async (req, res) => {
       );
       if (!part) return res.status(403).json({ error: 'Kein Zugriff' });
     }
+    const [[invitedUser]] = await db.query(
+      'SELECT id FROM users WHERE id=? AND is_active=1', [user_id]
+    );
+    if (!invitedUser) return res.status(404).json({ error: 'Benutzer nicht gefunden oder inaktiv' });
     await db.query(
       'INSERT IGNORE INTO chat_participants (chat_id, user_id) VALUES (?,?)',
       [chatId, user_id]
