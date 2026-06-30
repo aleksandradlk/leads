@@ -251,11 +251,8 @@
             <div class="section-label" style="margin-top:4px">Quellen</div>
             <div class="sources-grid">
               <div class="source-btn active" data-src="google" onclick="this.classList.toggle('active')"><i class="fab fa-google"></i> Google</div>
-              <div class="source-btn active" data-src="linkedin" onclick="this.classList.toggle('active')"><i class="fab fa-linkedin"></i> LinkedIn</div>
-              <div class="source-btn active" data-src="xing" onclick="this.classList.toggle('active')"><i class="fas fa-briefcase"></i> XING</div>
-              <div class="source-btn" data-src="facebook" onclick="this.classList.toggle('active')"><i class="fab fa-facebook"></i> Facebook</div>
               <div class="source-btn active" data-src="web" onclick="this.classList.toggle('active')"><i class="fas fa-globe"></i> Web</div>
-              <div class="source-btn" data-src="maps" onclick="this.classList.toggle('active')"><i class="fas fa-map-marker-alt"></i> Maps</div>
+              <div class="source-btn active" data-src="maps" onclick="this.classList.toggle('active')"><i class="fas fa-map-marker-alt"></i> Maps</div>
             </div>
 
             <div class="section-label">Felder</div>
@@ -1501,9 +1498,9 @@ async function generateLeads() {
     });
     generatedLeads = data.leads || [];
     document.getElementById('gen-progress').style.width = '100%';
-    genLog(`${generatedLeads.length} Leads gefunden`, 'ok');
+    genLog(`${generatedLeads.length} Leads gefunden${data.real_data ? ' — Live-Daten aus Google/Maps' : ' — KI-Wissen (API Key konfigurieren für Live-Daten)'}`, 'ok');
     generatedLeads.forEach(l => genLog(`✓ ${l.company} (${l.location||'?'}) Konfidenz: ${l.confidence}%`, 'ok'));
-    renderGenResults(generatedLeads);
+    renderGenResults(generatedLeads, data.real_data);
     document.getElementById('genResultsCard').style.display = 'block';
   } catch (e) {
     genLog(`Fehler: ${e.message}`, 'err');
@@ -1512,8 +1509,16 @@ async function generateLeads() {
   btn.disabled = false; btn.innerHTML = '<i class="fas fa-search"></i> Leads generieren';
 }
 
-function renderGenResults(leads) {
-  document.getElementById('genResultCount').textContent = leads.length;
+function renderGenResults(leads, realData) {
+  const cardTitle = document.querySelector('#genResultsCard .card-title');
+  if (cardTitle) {
+    const badge = realData
+      ? `<span style="background:var(--green);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px">Live-Daten</span>`
+      : `<span style="background:var(--amber);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px">KI-Wissen</span>`;
+    cardTitle.innerHTML = `<i class="fas fa-list" style="color:var(--green)"></i> Vorschau <span class="badge" id="genResultCount">${leads.length}</span>${badge}`;
+  } else {
+    document.getElementById('genResultCount').textContent = leads.length;
+  }
   document.getElementById('genResultsBody').innerHTML = leads.map(l => `
     <tr>
       <td style="font-weight:600">${escHtml(l.company||'—')}</td>
