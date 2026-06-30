@@ -7,6 +7,16 @@ async function pollIncomingEmails() {
   const pass = process.env.IMAP_PASS;
   if (!host || !user || !pass) return;
 
+  // Letzten Abfrage-Zeitpunkt aus DB lesen
+  const [[lastPollRow]] = await db.query(
+    "SELECT value FROM app_settings WHERE key_name='imap_last_poll'"
+  ).catch(() => [[null]]);
+
+  // Erster Lauf: nur letzte 30 Tage; sonst: seit letztem Poll minus 10 min Puffer
+  const since = lastPollRow
+    ? new Date(new Date(lastPollRow.value).getTime() - 10 * 60 * 1000)
+    : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
   const client = new ImapFlow({
     host,
     port: parseInt(process.env.IMAP_PORT || '993'),
@@ -20,11 +30,14 @@ async function pollIncomingEmails() {
     await client.connect();
     const lock = await client.getMailboxLock('INBOX');
     try {
-      for await (const msg of client.fetch('1:*', {
+      // Nur neue Nachrichten seit dem letzten Poll abrufen (nicht alle)
+      const uids = await client.search({ since }, { uid: true });
+
+      for await (const msg of client.fetch(uids.length ? uids : [], {
         envelope: true,
-        bodyParts: ['text'],
+        bodyParts: ['TEXT'],
         headers: ['in-reply-to', 'references', 'x-crm-lead-id'],
-      })) {
+      }, { uid: true })) {
         const messageId = msg.envelope?.messageId;
         if (!messageId) continue;
 
@@ -37,7 +50,7 @@ async function pollIncomingEmails() {
         const fromAddr = msg.envelope?.from?.[0]?.address?.toLowerCase() || '';
         const subject  = msg.envelope?.subject || '';
 
-        // ── 3-stufige Lead-Zuordnung ─────────────────────────────
+        // ── 4-stufige Lead-Zuordnung ─────────────────────────────
         let leadId = null;
 
         // Stufe 1: X-CRM-Lead-ID Header (direkter Treffer)
@@ -54,11 +67,12 @@ async function pollIncomingEmails() {
 
         // Stufe 2: In-Reply-To / References gegen gesendete Message-IDs
         if (!leadId) {
-          const inReplyTo = msg.headers?.get('in-reply-to') || '';
-          const references = msg.headers?.get('references') || '';
-          // Alle referenzierten Message-IDs extrahieren
-          const refIds = [...String(inReplyTo).matchAll(/<([^>]+)>/g), ...String(references).matchAll(/<([^>]+)>/g)]
-            .map(m => `<${m[1]}>`);
+          const inReplyTo  = msg.headers?.get('in-reply-to') || '';
+          const references = msg.headers?.get('references')  || '';
+          const refIds = [
+            ...String(inReplyTo).matchAll(/<([^>]+)>/g),
+            ...String(references).matchAll(/<([^>]+)>/g),
+          ].map(m => `<${m[1]}>`);
           if (refIds.length) {
             const placeholders = refIds.map(() => '?').join(',');
             const [[row]] = await db.query(
@@ -81,15 +95,13 @@ async function pollIncomingEmails() {
           }
         }
 
-        // Stufe 4: E-Mail-Adresse des Absenders (klassischer Fallback)
+        // Stufe 4: E-Mail-Adresse des Absenders (Fallback)
         if (!leadId && fromAddr) {
           const [[row]] = await db.query(
             'SELECT id FROM leads WHERE LOWER(email)=? AND archived_at IS NULL LIMIT 1', [fromAddr]
           ).catch(() => [[null]]);
           if (row) leadId = row.id;
         }
-
-        if (!leadId) continue; // keiner der 4 Wege hat einen Lead gefunden
 
         // Body-Text extrahieren
         let bodyText = '';
@@ -101,7 +113,17 @@ async function pollIncomingEmails() {
         bodyText = bodyText.replace(/<[^>]+>/g, '').replace(/\r\n/g, '\n').trim();
 
         const receivedAt = msg.envelope?.date || new Date();
-        const toAddr = msg.envelope?.to?.[0]?.address || user;
+        const toAddr     = msg.envelope?.to?.[0]?.address || user;
+
+        if (!leadId) {
+          // Kein Lead gefunden → in unmatched_emails speichern (Admin-Liste)
+          await db.query(
+            `INSERT IGNORE INTO unmatched_emails (from_address, to_address, subject, body_text, message_id, received_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [fromAddr, toAddr, subject, bodyText.slice(0, 10000), messageId, receivedAt]
+          ).catch(() => {});
+          continue;
+        }
 
         await db.query(
           `INSERT INTO lead_emails (lead_id, direction, from_address, to_address, subject, body_text, message_id, received_at)
@@ -113,6 +135,13 @@ async function pollIncomingEmails() {
       lock.release();
     }
     await client.logout();
+
+    // Letzten Poll-Zeitpunkt aktualisieren
+    await db.query(
+      "INSERT INTO app_settings (key_name, value) VALUES ('imap_last_poll',?) ON DUPLICATE KEY UPDATE value=?",
+      [new Date().toISOString(), new Date().toISOString()]
+    ).catch(() => {});
+
   } catch (e) {
     if (e.code !== 'ECONNREFUSED') {
       console.error('[IMAP Poller]', e.message);

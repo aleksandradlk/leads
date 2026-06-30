@@ -2762,10 +2762,58 @@ document.getElementById('editContactInputCl')?.addEventListener('keydown', funct
   </div>
 </div>
 
+<!-- WARTUNGSMODUS-OVERLAY -->
+<div id="maintenanceOverlay" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(20,31,52,0.97);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:0">
+  <div style="text-align:center;padding:40px;max-width:480px">
+    <div style="font-size:56px;margin-bottom:24px">🔧</div>
+    <div style="font-size:22px;font-weight:700;color:#f59e0b;margin-bottom:12px">System-Wartung</div>
+    <div style="font-size:15px;color:#c8d3e8;margin-bottom:20px;line-height:1.6">
+      Das CRM-System wird gerade gewartet.<br>Bitte habe etwas Geduld.
+    </div>
+    <div id="maintUntilInfo" style="display:none;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:14px 20px;font-size:13px;color:#fbbf24;margin-bottom:0">
+      <i class="fas fa-clock" style="margin-right:6px"></i>
+      Voraussichtlich verfügbar ab: <strong id="maintUntilTime"></strong>
+    </div>
+  </div>
+</div>
+
 <script>
 if (ME && !ME.onboarding_shown) {
   document.getElementById('onboardingModal').classList.add('open');
 }
+
+// ── WARTUNGSMODUS-PRÜFUNG ─────────────────────────────────────
+let _maintActive = false;
+async function checkMaintenanceStatus() {
+  try {
+    const res = await fetch('/api/settings/status');
+    const data = await res.json();
+    const overlay = document.getElementById('maintenanceOverlay');
+    if (!overlay) return;
+    if (data.maintenance) {
+      _maintActive = true;
+      overlay.style.display = 'flex';
+      const untilEl = document.getElementById('maintUntilInfo');
+      const untilTimeEl = document.getElementById('maintUntilTime');
+      if (data.until) {
+        const d = new Date(data.until);
+        untilTimeEl.textContent = d.toLocaleString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+        untilEl.style.display = 'block';
+      } else {
+        untilEl.style.display = 'none';
+      }
+    } else {
+      if (_maintActive) {
+        // Wartung gerade beendet — Seite neu laden damit Closer normal arbeiten können
+        window.location.reload();
+      }
+      _maintActive = false;
+      overlay.style.display = 'none';
+    }
+  } catch {}
+}
+checkMaintenanceStatus();
+setInterval(checkMaintenanceStatus, 60 * 1000);
 </script>
 </body>
 </html>

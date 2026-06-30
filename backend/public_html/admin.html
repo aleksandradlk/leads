@@ -362,6 +362,15 @@
           <tbody id="activityBody"></tbody></table>
         </div>
       </div>
+
+      <!-- Unzugeordnete E-Mails -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:28px 0 12px">
+        <h2 style="font-size:16px;font-weight:600;margin:0"><i class="fas fa-envelope-open-text" style="color:var(--accent);margin-right:8px"></i>Unzugeordnete E-Mails</h2>
+        <button class="btn btn-ghost btn-sm" onclick="loadUnmatchedEmails()"><i class="fas fa-sync"></i> Aktualisieren</button>
+      </div>
+      <div class="card" id="unmatchedEmailsCard">
+        <div style="color:var(--text3);padding:20px;text-align:center;font-size:13px">Wird geladen…</div>
+      </div>
     </div>
 
     <!-- ── TAB: WIKI ─────────────────────────────────── -->
@@ -711,7 +720,7 @@ function showTab(name) {
   }
   if (name === 'myLeads')  renderMyLeads();
   if (name === 'users')    { loadUsers(); loadAppSettings(); }
-  if (name === 'tracking') loadTracking();
+  if (name === 'tracking') { loadTracking(); loadUnmatchedEmails(); }
   if (name === 'wiki')     { loadWiki(); loadEmailTemplatesForAdmin(); }
   if (name === 'chat')     loadChats();
   if (name === 'feedback') loadFeedback();
@@ -1822,6 +1831,45 @@ function downloadActivityLog() {
     .catch(e => showToast('Download fehlgeschlagen', 'err'));
 }
 
+// ── UNZUGEORDNETE E-MAILS ─────────────────────────────────────
+async function loadUnmatchedEmails() {
+  const card = document.getElementById('unmatchedEmailsCard');
+  if (!card) return;
+  try {
+    const rows = await api('GET', '/leads/unmatched-emails');
+    if (!rows.length) {
+      card.innerHTML = '<div style="color:var(--text3);padding:20px;text-align:center;font-size:13px"><i class="fas fa-check-circle" style="color:var(--green);margin-right:6px"></i>Keine unzugeordneten E-Mails</div>';
+      return;
+    }
+    card.innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Eingang</th><th>Von</th><th>Betreff</th><th>Nachricht</th><th></th></tr></thead>
+          <tbody>
+            ${rows.map(m => `
+              <tr>
+                <td style="white-space:nowrap;font-size:12px">${fmtDate(m.received_at||m.created_at)}</td>
+                <td style="font-size:12px">${escHtml(m.from_address||'')}</td>
+                <td style="font-size:12px">${escHtml(m.subject||'(kein Betreff)')}</td>
+                <td style="font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml((m.body_text||'').slice(0,120))}</td>
+                <td><button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deleteUnmatchedEmail(${m.id})"><i class="fas fa-trash"></i></button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } catch(e) {
+    card.innerHTML = `<div style="color:var(--red);padding:16px;font-size:13px">Fehler: ${escHtml(e.message)}</div>`;
+  }
+}
+async function deleteUnmatchedEmail(id) {
+  if (!confirm('Eintrag löschen?')) return;
+  try {
+    await api('DELETE', `/leads/unmatched-emails/${id}`);
+    loadUnmatchedEmails();
+  } catch(e) { showToast(e.message,'err'); }
+}
+
 // ── CSV EXPORT ────────────────────────────────────────────────
 function exportCSV() {
   const data = currentFilteredLeads.length ? currentFilteredLeads : allLeads;
@@ -2551,6 +2599,12 @@ async function openSettingsModal() {
     const elScript = document.getElementById('settingCallScript');
     if (elGoal)   elGoal.value   = settings.daily_call_goal || '50';
     if (elScript) elScript.value = settings.call_script || '';
+    const elMaint = document.getElementById('settingMaintenanceMode');
+    const elMaintUntil = document.getElementById('settingMaintenanceUntil');
+    if (elMaint) elMaint.checked = settings.maintenance_mode === 'true';
+    if (elMaintUntil) elMaintUntil.value = settings.maintenance_until
+      ? new Date(settings.maintenance_until).toISOString().slice(0,16)
+      : '';
   } catch {}
   document.getElementById('settingsModal').classList.add('open');
 }
@@ -2566,6 +2620,10 @@ async function saveNotifSettings() {
     await api('PATCH', `/users/${me.id}/notify`, { notify_email, phone, email });
     await api('PATCH', '/settings/daily_call_goal', { value: goal });
     await api('PATCH', '/settings/call_script',     { value: script });
+    const maintMode  = document.getElementById('settingMaintenanceMode')?.checked ? 'true' : 'false';
+    const maintUntil = document.getElementById('settingMaintenanceUntil')?.value || '';
+    await api('PATCH', '/settings/maintenance_mode',  { value: maintMode });
+    await api('PATCH', '/settings/maintenance_until', { value: maintUntil });
     showToast('Einstellungen gespeichert ✓');
     closeSettingsModal();
   } catch(e) { showToast(e.message, 'err'); }
@@ -3229,6 +3287,16 @@ document.getElementById('addLeadModal').addEventListener('click', function(e){ i
     <div class="form-group" style="margin-top:8px">
       <label>Leitfaden-Text <span style="font-size:11px;color:var(--text3);font-weight:400">(wird im Panel der Closer angezeigt)</span></label>
       <textarea id="settingCallScript" class="form-control" rows="6" placeholder="1. Hallo, mein Name ist...&#10;2. Ich rufe an wegen...&#10;3. Haben Sie kurz Zeit?" style="resize:vertical;font-size:12px;line-height:1.6"></textarea>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+    <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--text2)"><i class="fas fa-tools" style="color:#f59e0b;margin-right:6px"></i>System-Wartung</div>
+    <label style="display:flex;align-items:center;gap:10px;padding:8px 0;cursor:pointer;font-size:13px">
+      <input type="checkbox" id="settingMaintenanceMode" style="accent-color:#f59e0b">
+      Wartungsmodus aktiv <span style="font-size:11px;color:var(--text3);font-weight:400">(Closer können nicht auf das CRM zugreifen)</span>
+    </label>
+    <div class="form-group" style="margin-top:8px">
+      <label>Verfügbar ab (voraussichtlich) <span style="font-size:11px;color:var(--text3);font-weight:400">(Wartung endet automatisch zu diesem Zeitpunkt)</span></label>
+      <input id="settingMaintenanceUntil" class="form-control" type="datetime-local">
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
       <button class="btn btn-ghost btn-sm" onclick="closeSettingsModal()">Abbrechen</button>

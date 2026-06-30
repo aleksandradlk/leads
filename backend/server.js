@@ -240,6 +240,19 @@ db.query(`CREATE TABLE IF NOT EXISTS lead_emails (
   UNIQUE KEY uq_message_id (message_id(250))
 )`).catch(() => {});
 
+// ── Unzugeordnete eingehende E-Mails ─────────────────────────
+db.query(`CREATE TABLE IF NOT EXISTS unmatched_emails (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  from_address VARCHAR(255),
+  to_address   VARCHAR(255),
+  subject      VARCHAR(500),
+  body_text    TEXT,
+  message_id   VARCHAR(500),
+  received_at  DATETIME,
+  created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_unmatched_mid (message_id(250))
+)`).catch(() => {});
+
 // ── Settings-Tabelle ─────────────────────────────────────────
 db.query(`CREATE TABLE IF NOT EXISTS app_settings (
   key_name VARCHAR(100) PRIMARY KEY,
@@ -247,6 +260,8 @@ db.query(`CREATE TABLE IF NOT EXISTS app_settings (
 )`).catch(() => {});
 db.query("INSERT IGNORE INTO app_settings (key_name, value) VALUES ('closer_sees_admins','false')").catch(() => {});
 db.query("INSERT IGNORE INTO app_settings (key_name, value) VALUES ('closer_sees_tool','false')").catch(() => {});
+db.query("INSERT IGNORE INTO app_settings (key_name, value) VALUES ('maintenance_mode','false')").catch(() => {});
+db.query("INSERT IGNORE INTO app_settings (key_name, value) VALUES ('maintenance_until','')").catch(() => {});
 
 db.query(`CREATE TABLE IF NOT EXISTS tools (
   id             INT AUTO_INCREMENT PRIMARY KEY,
@@ -290,6 +305,6 @@ app.listen(PORT, () => {
   console.log(`Umgebung: ${process.env.NODE_ENV || 'development'}`);
   startReminderCron();
   // IMAP-Polling alle 5 Minuten
-  cron.schedule('*/5 * * * *', pollIncomingEmails);
+  cron.schedule('*/2 * * * *', pollIncomingEmails);
   pollIncomingEmails(); // Sofort beim Start einmal prüfen
 });
